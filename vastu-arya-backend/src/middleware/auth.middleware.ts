@@ -4,6 +4,7 @@ import User from '../models/User';
 
 export interface AuthRequest extends Request {
   user?: any;
+  body: any;
 }
 
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
