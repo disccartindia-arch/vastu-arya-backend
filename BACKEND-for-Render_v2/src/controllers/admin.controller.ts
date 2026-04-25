@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { Request, Response } from 'express';
 import User from '../models/User';
 import Order from '../models/Order';
@@ -27,7 +28,6 @@ export const getDashboardStats = async (req: Request, res: Response) => {
     ]);
 
     const totalRevenue = (revenueAgg[0]?.total || 0) + (bookingRevenueAgg[0]?.total || 0);
-
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -43,13 +43,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: {
-        stats: { totalUsers, totalOrders, totalBookings, totalServices, totalProducts, totalBlogs, totalRevenue },
-        revenueChart,
-        recentOrders,
-        recentBookings,
-        recentUsers,
-      }
+      data: { stats: { totalUsers, totalOrders, totalBookings, totalServices, totalProducts, totalBlogs, totalRevenue }, revenueChart, recentOrders, recentBookings, recentUsers }
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -75,6 +69,20 @@ export const updateUser = async (req: Request, res: Response) => {
     const user = await User.findByIdAndUpdate(req.params.id, { role, isActive }, { new: true }).select('-password');
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, message: 'User updated', data: user });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const runProductSeed = async (req: Request, res: Response) => {
+  try {
+    const { seedProducts } = await import('../utils/seedProducts');
+    const result = await seedProducts();
+    res.json({
+      success: true,
+      message: `Products seeded: ${result.inserted} inserted, ${result.skipped} already existed.`,
+      data: result,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
