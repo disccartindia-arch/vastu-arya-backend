@@ -29,27 +29,20 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// CORS
-const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:3000',
-  'http://localhost:3000',
-  'https://vastuarya.vercel.app',
-  'https://vastuarya.com',
-  'https://www.vastuarya.com'
-];
-
+// CORS — allow all origins (handles dynamic Vercel preview URLs + custom domains)
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+  origin: (origin: any, callback: any) => {
+    // Allow all: Vercel previews, localhost, custom domains, mobile apps
+    callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 200,
 }));
+
+// Explicit preflight handler for all routes
+app.options('*', cors());
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));

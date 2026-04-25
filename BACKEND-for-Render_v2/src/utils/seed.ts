@@ -209,11 +209,6 @@ async function seed() {
       console.log('✅ Site settings seeded');
     }
 
-    // Seed Products (5 per category)
-    const { seedProducts } = await import('./seedProducts');
-    await seedProducts();
-    console.log('✅ Products seeded');
-
     // Seed Slider
     const existingSlider = await Slider.findOne();
     if (!existingSlider) {
