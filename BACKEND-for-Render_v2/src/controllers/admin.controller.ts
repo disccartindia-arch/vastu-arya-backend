@@ -79,3 +79,13 @@ export const updateUser = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const runProductSeed = async (req: Request, res: Response) => {
+  try {
+    const { seedProducts } = await import('../utils/seedProducts');
+    const result = await seedProducts();
+    res.json({ success: true, message: `Products seeded: ${result.inserted} inserted, ${result.skipped} already existed.`, data: result });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

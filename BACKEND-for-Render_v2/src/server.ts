@@ -29,19 +29,16 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// CORS — allow all origins (handles dynamic Vercel preview URLs + custom domains)
+// CORS — allow all origins (Vercel previews, custom domains, localhost)
 app.use(cors({
-  origin: (origin: any, callback: any) => {
-    // Allow all: Vercel previews, localhost, custom domains, mobile apps
-    callback(null, true);
-  },
+  origin: (origin: any, callback: any) => { callback(null, true); },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   optionsSuccessStatus: 200,
 }));
 
-// Explicit preflight handler for all routes
+// Explicit preflight for all routes
 app.options('*', cors());
 
 // Body parsing
