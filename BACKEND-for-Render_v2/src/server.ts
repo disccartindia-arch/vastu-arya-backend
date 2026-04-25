@@ -19,6 +19,7 @@ import adminRoutes from './routes/admin.routes';
 import settingsRoutes from './routes/settings.routes';
 import uploadRoutes from './routes/upload.routes';
 import reviewRoutes from './routes/review.routes';
+import homepageRoutes from './routes/homepage.routes';
 import { errorMiddleware } from './middleware/error.middleware';
 
 const app = express();
@@ -77,6 +78,7 @@ app.use('/api/blogs', blogRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/homepage', homepageRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/reviews', reviewRoutes);
 
