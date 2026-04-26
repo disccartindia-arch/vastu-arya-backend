@@ -22,11 +22,11 @@ export interface IHomepageSettings extends Document {
 }
 
 const HomepageSettingsSchema = new Schema<IHomepageSettings>({
-  contactNumber:      { type: String, default: '+91-9999999999' },
-  contactPhone:       { type: String, default: '+91-9999999999' },
+  contactNumber:      { type: String, default: '+91-7000343804' },
+  contactPhone:       { type: String, default: '+91-7000343804' },
   contactEmail:       { type: String, default: 'contact@vastuarya.com' },
   contactAddress:     { type: String, default: 'New Delhi, India' },
-  contactWhatsapp:    { type: String, default: '919999999999' },
+  contactWhatsapp:    { type: String, default: '917000343804' },
   brandName:          { type: String, default: 'Vastu Arya' },
   brandSubtitle:      { type: String, default: 'IVAF Certified' },
   brandFontSize:      { type: String, default: '18' },
