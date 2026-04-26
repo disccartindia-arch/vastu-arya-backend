@@ -29,7 +29,6 @@ import searchRoutes from './routes/search.routes';
 import postRoutes from './routes/post.routes';
 import aiRoutes from './routes/ai.routes';
 
-import aiRoutes from './routes/ai.routes';
 import aiSettingsRoutes from './routes/aiSettings.routes';
 import { errorMiddleware } from './middleware/error.middleware';
 
