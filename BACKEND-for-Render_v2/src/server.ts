@@ -48,6 +48,7 @@ app.options('*', cors());
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Legacy local uploads — new uploads go to Cloudinary. This serves any old local files that may remain.
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 if (env.NODE_ENV !== 'production') app.use(morgan('dev'));
 
