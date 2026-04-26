@@ -75,3 +75,15 @@ export const runProductSeed = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const runServiceSeed = async (req: Request, res: Response) => {
+  try {
+    const { seedDatabase } = await import('../utils/seed');
+    await seedDatabase();
+    const Service = (await import('../models/Service')).default;
+    const count = await Service.countDocuments();
+    res.json({ success: true, message: `Services seeded successfully. Total services in DB: ${count}.` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

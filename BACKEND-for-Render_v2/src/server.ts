@@ -32,6 +32,7 @@ import aiRoutes from './routes/ai.routes';
 import aiSettingsRoutes from './routes/aiSettings.routes';
 import productGeneratorRoutes from './routes/productGenerator.routes';
 import { errorMiddleware } from './middleware/error.middleware';
+import { seedDatabase } from './utils/seed';
 
 const app = express();
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
@@ -87,6 +88,8 @@ const connectAndStart = async () => {
     if (!env.MONGO_URI) throw new Error('MONGO_URI not set');
     await mongoose.connect(env.MONGO_URI as string);
     con.log('MongoDB connected');
+    // Auto-seed services on startup (safe — skips existing)
+    seedDatabase().catch(e => con.warn('[Seed] Auto-seed warning:', e.message));
     app.listen(PORT, () => con.log(`Vastu Arya API v3.0 on port ${PORT}`));
   } catch (error) {
     con.error('Startup failed:', error);
