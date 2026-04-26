@@ -233,3 +233,47 @@ const services = [
     seo: { title: 'New Property Vastu Check | Before You Buy | Dr. PPS Tomar', description: 'Vastu assessment of new home, flat, plot or office before purchase by IVAF certified Dr. PPS Tomar.', keywords: 'new home vastu check, property vastu, plot vastu' }
   },
 
+];
+
+const products = [
+  { name: { en: '7 Chakra Rudraksha Bracelet', hi: '7 चक्र रुद्राक्ष ब्रेसलेट' }, slug: '7-chakra-rudraksha-bracelet', category: 'rudraksha', description: { en: 'Balances all 7 chakras. Promotes peace, health and prosperity.', hi: 'सभी 7 चक्रों को संतुलित करता है।' }, benefits: ['Balances energy', 'Reduces stress', 'Promotes positive aura', 'Enhances mental clarity'], price: 1999, offerPrice: 999, images: [], stock: 50, isFeatured: true, isNewLaunch: false },
+  { name: { en: 'Natural Citrine Gemstone Pendant', hi: 'प्राकृतिक सिट्रीन रत्न पेंडेंट' }, slug: 'citrine-gemstone-pendant', category: 'gemstone-pendants', description: { en: 'Natural citrine for wealth, success and positive energy.', hi: 'धन, सफलता के लिए प्राकृतिक सिट्रीन।' }, benefits: ['Attracts wealth', 'Boosts confidence', 'Removes negativity', 'Enhances creativity'], price: 3500, offerPrice: 1750, images: [], stock: 25, isFeatured: true, isNewLaunch: false },
+  { name: { en: 'Shree Yantra (Gold Plated)', hi: 'श्री यंत्र (सोना चढ़ा)' }, slug: 'shree-yantra-gold-plated', category: 'yantras', description: { en: 'Sacred Shree Yantra for wealth and prosperity.', hi: 'धन और समृद्धि के लिए पवित्र श्री यंत्र।' }, benefits: ['Attracts wealth', 'Removes financial obstacles', 'Brings positive energy', 'Sacred Lakshmi yantra'], price: 2500, offerPrice: 1299, images: [], stock: 30, isFeatured: true, isNewLaunch: true },
+  { name: { en: 'Panchmukhi Rudraksha Mala', hi: 'पंचमुखी रुद्राक्ष माला' }, slug: 'panchmukhi-rudraksha-mala', category: 'sacred-mala', description: { en: '108 bead Panchmukhi Rudraksha mala for meditation and spiritual growth.', hi: 'ध्यान और आध्यात्मिक विकास के लिए 108 दाने की माला।' }, benefits: ['Enhances meditation', 'Promotes spiritual growth', 'Reduces anxiety', 'Brings divine blessings'], price: 2999, offerPrice: 1499, images: [], stock: 40, isFeatured: false, isNewLaunch: true },
+  { name: { en: 'Vastu Crystal Pyramid', hi: 'वास्तु क्रिस्टल पिरामिड' }, slug: 'vastu-crystal-pyramid', category: 'yantras', description: { en: 'Clear quartz pyramid for positive Vastu energy in your home.', hi: 'घर में सकारात्मक वास्तु ऊर्जा के लिए स्पष्ट क्वार्ट्ज पिरामिड।' }, benefits: ['Amplifies positive energy', 'Removes Vastu defects', 'Enhances harmony', 'Improves prosperity'], price: 1500, offerPrice: 799, images: [], stock: 60, isFeatured: true, isNewLaunch: true },
+];
+
+export async function seedDatabase() {
+  const con = (console as any);
+  let servicesAdded = 0, productsAdded = 0;
+  try {
+    const Service = (await import('../models/Service')).default;
+    for (const service of services) {
+      const existing = await Service.findOne({ slug: service.slug });
+      if (!existing) { await Service.create(service); servicesAdded++; }
+    }
+    con.log(`[Seed] Services: ${servicesAdded} added`);
+  } catch (e) { con.error('[Seed] Services error:', e); }
+
+  try {
+    const Product = (await import('../models/Product')).default;
+    for (const product of products) {
+      const existing = await Product.findOne({ slug: product.slug });
+      if (!existing) { await Product.create(product); productsAdded++; }
+    }
+    con.log(`[Seed] Products: ${productsAdded} added`);
+  } catch (e) { con.error('[Seed] Products error:', e); }
+
+  try {
+    const User = (await import('../models/User')).default;
+    const bcrypt = await import('bcryptjs');
+    const adminEmail = (process as any).env.ADMIN_EMAIL || 'Vastuarya@Admin.com';
+    const adminPass  = (process as any).env.ADMIN_PASSWORD || 'Admin@2407@';
+    const existing = await User.findOne({ email: adminEmail });
+    if (!existing) {
+      const hashed = await bcrypt.default.hash(adminPass, 12);
+      await User.create({ name: 'Vastu Arya Admin', email: adminEmail, password: hashed, phone: '+91-7000343804', role: 'admin', isActive: true });
+      con.log('[Seed] Admin user created');
+    }
+  } catch (e) { con.error('[Seed] Admin error:', e); }
+}
