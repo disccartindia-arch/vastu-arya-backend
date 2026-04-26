@@ -48,7 +48,7 @@ export const bookingConfirmationEmail = (name: string, serviceName: string, book
             <p style="margin: 4px 0; color: #1A0A00;"><strong>Service:</strong> ${serviceName}</p>
             <p style="margin: 4px 0; color: #1A0A00;"><strong>Amount Paid:</strong> ₹${amount}</p>
           </div>
-          <p style="color: #5C3D1E;">Our expert Dr. PPS will contact you within 24 hours on your registered phone number.</p>
+          <p style="color: #5C3D1E;">Our expert Dr. PPS Tomar will contact you within 24 hours on your registered phone number.</p>
           <p style="color: #5C3D1E;">For WhatsApp: <strong>+91-XXXXXXXXXX</strong></p>
           <p style="color: #8B6344; font-size: 12px; margin-top: 30px;">© 2024 Vastu Arya | IVAF Certified | New Delhi, India</p>
         </div>

@@ -31,7 +31,7 @@ const HomepageSettingsSchema = new Schema<IHomepageSettings>({
   brandSubtitle:      { type: String, default: 'IVAF Certified' },
   brandFontSize:      { type: String, default: '18' },
   heroHeading:        { type: String, default: 'Transform Your Space, Transform Your Life' },
-  heroSubheading:     { type: String, default: "India's Premier Vastu Shastra & Astrology Platform by Dr. PPS" },
+  heroSubheading:     { type: String, default: "India's Premier Vastu Shastra & Astrology Platform by Dr. PPS Tomar" },
   cta1Text:           { type: String, default: 'Book Appointment @ ₹11' },
   cta1Link:           { type: String, default: '/book-appointment' },
   cta2Text:           { type: String, default: 'Explore Vastu Store' },

@@ -1,33 +1,14 @@
 /// <reference types="node" />
 import { Router, Request, Response } from 'express';
+import AISettings from '../models/AISettings';
 import rateLimit from 'express-rate-limit';
 
 const router = Router();
-const aiLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: { success: false, message: 'Too many AI requests. Please wait a minute.' } });
-
-const VASTU_SYSTEM_PROMPT = `You are Dr. PPS, an IVAF Certified Vastu Shastra expert with 15+ years of experience. You have helped 45,000+ clients transform their homes and lives.
-
-Your role:
-- Provide authentic, actionable Vastu guidance based on the user's concern
-- Be warm, empathetic, and expert-like
-- Give 3-4 specific, practical Vastu remedies
-- Each remedy should include: what to do, where (direction/zone), and why it helps
-- Keep responses concise but impactful (under 400 words)
-- End by gently suggesting a personal consultation for deeper analysis
-- Use simple language, avoid jargon
-- Include relevant emojis to make responses engaging
-- Respond in the same language the user writes in (English/Hindi)
-
-Format your response as JSON:
-{
-  "greeting": "short personalized opening",
-  "analysis": "brief 1-2 sentence analysis of the concern",
-  "remedies": [
-    { "title": "remedy name", "action": "what to do", "zone": "which direction/area", "benefit": "expected improvement" }
-  ],
-  "note": "closing encouragement",
-  "consultationCTA": "natural, non-pushy suggestion to consult Dr. PPS personally"
-}`;
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { success: false, message: 'Too many AI requests. Please wait a minute.' },
+});
 
 router.post('/vastu-analysis', aiLimiter, async (req: Request, res: Response) => {
   try {
@@ -36,27 +17,73 @@ router.post('/vastu-analysis', aiLimiter, async (req: Request, res: Response) =>
       return res.status(400).json({ success: false, message: 'Please describe your concern in more detail.' });
     }
 
+    // ── Load admin-controlled settings from DB ────────────────────────────
+    let settings = await AISettings.findOne();
+    if (!settings) settings = await AISettings.create({});
+
     const apiKey = (process as any).env.ANTHROPIC_API_KEY;
+
+    // ── Demo fallback (no API key) ────────────────────────────────────────
     if (!apiKey) {
-      // Fallback response when no API key is configured
       return res.json({
         success: true,
+        isDemo: true,
         data: {
           greeting: 'Namaste! Thank you for reaching out.',
           analysis: `I understand your concern about ${concern.slice(0, 50)}. Let me provide some Vastu guidance.`,
           remedies: [
-            { title: 'Entrance Energising', action: 'Place a Ganesha idol or symbol at your main entrance', zone: 'North-East or East entrance', benefit: 'Attracts positive energy and removes obstacles' },
-            { title: 'Space Clearing', action: 'Light a camphor lamp daily for 5 minutes', zone: 'Centre of your home (Brahmasthana)', benefit: 'Purifies energy and removes negativity' },
-            { title: 'Wealth Zone Activation', action: 'Place a money plant or Kuber Yantra', zone: 'North corner of living room', benefit: 'Activates financial energy flow' },
+            {
+              title: 'Entrance Energising',
+              action: 'Place a Ganesha idol or symbol at your main entrance',
+              zone: 'North-East or East entrance',
+              benefit: 'Attracts positive energy and removes obstacles',
+            },
+            {
+              title: 'Space Clearing',
+              action: 'Light a camphor lamp daily for 5 minutes',
+              zone: 'Centre of your home (Brahmasthana)',
+              benefit: 'Purifies energy and removes negativity',
+            },
+            {
+              title: 'Wealth Zone Activation',
+              action: 'Place a money plant or Kuber Yantra',
+              zone: 'North corner of living room',
+              benefit: 'Activates financial energy flow',
+            },
           ],
-          note: 'These are general Vastu principles. Results improve significantly with a personalized analysis.',
-          consultationCTA: 'For a detailed analysis of your specific space, a personal consultation with Dr. PPS would reveal deeper insights tailored to your home.',
+          note: settings.commonLines.join(' '),
+          consultationCTA: settings.showConsultationCTA
+            ? settings.ctaText
+            : '',
+          disclaimer: settings.showDisclaimer ? settings.disclaimerText : '',
+          followUp: settings.showFollowUp ? settings.followUpText : '',
         },
-        isDemo: true,
       });
     }
 
-    const userMessage = `My Vastu concern: ${concern}${roomType ? `\nRoom type: ${roomType}` : ''}${direction ? `\nFacing direction: ${direction}` : ''}`;
+    // ── Live Claude API call ──────────────────────────────────────────────
+    const userMessage = [
+      `My Vastu concern: ${concern}`,
+      roomType   ? `Room type: ${roomType}`           : '',
+      direction  ? `Facing direction: ${direction}`   : '',
+      settings.trustedAdviceBlocks.length
+        ? `\nTrusted advice context:\n${settings.trustedAdviceBlocks.map((b: any) => `${b.title}: ${b.content}`).join('\n')}`
+        : '',
+    ].filter(Boolean).join('\n');
+
+    // Append admin-controlled additions to system prompt
+    const fullSystemPrompt = [
+      settings.systemPrompt,
+      settings.commonLines.length
+        ? `\nAlways include these lines in every response:\n${settings.commonLines.join('\n')}`
+        : '',
+      settings.showConsultationCTA
+        ? `\nAt the end, include a consultationCTA suggesting: "${settings.ctaText}"`
+        : '\nDo NOT include a consultation CTA.',
+      settings.showDisclaimer
+        ? `\nDisclaimer to add: "${settings.disclaimerText}"`
+        : '',
+    ].filter(Boolean).join('\n');
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -66,9 +93,9 @@ router.post('/vastu-analysis', aiLimiter, async (req: Request, res: Response) =>
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 800,
-        system: VASTU_SYSTEM_PROMPT,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1000,
+        system: fullSystemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       }),
     });
@@ -77,7 +104,7 @@ router.post('/vastu-analysis', aiLimiter, async (req: Request, res: Response) =>
     const aiData: any = await response.json();
     const rawText = aiData.content?.[0]?.text || '';
 
-    let parsed;
+    let parsed: any;
     try {
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
@@ -88,15 +115,32 @@ router.post('/vastu-analysis', aiLimiter, async (req: Request, res: Response) =>
         greeting: 'Namaste!',
         analysis: rawText.slice(0, 200),
         remedies: [],
-        note: 'Please consult Dr. PPS for a complete analysis.',
-        consultationCTA: 'Book a personal consultation for deeper insights.',
+        note: settings.commonLines.join(' '),
+        consultationCTA: settings.showConsultationCTA ? settings.ctaText : '',
       };
+    }
+
+    // Inject admin-controlled fields
+    parsed.disclaimer = settings.showDisclaimer ? settings.disclaimerText : '';
+    parsed.followUp   = settings.showFollowUp   ? settings.followUpText   : '';
+    if (settings.showConsultationCTA && !parsed.consultationCTA) {
+      parsed.consultationCTA = settings.ctaText;
     }
 
     res.json({ success: true, data: parsed });
   } catch (error: any) {
     (console as any).error('AI route error:', error);
     res.status(500).json({ success: false, message: 'AI analysis temporarily unavailable. Please try again.' });
+  }
+});
+
+// Public: get quick suggestions (for frontend dropdowns)
+router.get('/suggestions', async (req: Request, res: Response) => {
+  try {
+    const settings = await AISettings.findOne().select('quickSuggestions');
+    res.json({ success: true, data: settings?.quickSuggestions || [] });
+  } catch {
+    res.json({ success: true, data: [] });
   }
 });
 

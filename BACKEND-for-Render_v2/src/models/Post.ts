@@ -32,7 +32,7 @@ const PostSchema = new Schema<IPost>({
   commentCount: { type: Number, default: 0 },
   isFeatured: { type: Boolean, default: false },
   isPublished: { type: Boolean, default: true },
-  author: { type: String, default: 'Dr. PPS' },
+  author: { type: String, default: 'Dr. PPS Tomar' },
   category: { type: String, default: 'vastu-tip' },
   sortOrder: { type: Number, default: 0 },
 }, { timestamps: true });

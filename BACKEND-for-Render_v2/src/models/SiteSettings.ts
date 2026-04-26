@@ -35,7 +35,7 @@ const SiteSettingsSchema = new Schema<ISiteSettings>({
   razorpayKeyId: { type: String },
   seo: {
     defaultTitle: { type: String, default: 'Vastu Arya - Premium Vastu & Astrology Consultancy' },
-    defaultDescription: { type: String, default: 'India\'s premier Vastu Shastra, Astrology, Numerology and Gemology consultation platform by Dr. PPS - IVAF Certified Expert.' },
+    defaultDescription: { type: String, default: 'India\'s premier Vastu Shastra, Astrology, Numerology and Gemology consultation platform by Dr. PPS Tomar - IVAF Certified Expert.' },
     ogImage: { type: String }
   },
   enableHindi: { type: Boolean, default: true },

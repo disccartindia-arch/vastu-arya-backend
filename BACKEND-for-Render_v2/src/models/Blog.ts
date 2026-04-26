@@ -23,7 +23,7 @@ const BlogSchema = new Schema<IBlog>({
   coverImage: { type: String },
   category: { type: String, default: 'vastu' },
   tags: [{ type: String }],
-  author: { type: String, default: 'Dr. PPS' },
+  author: { type: String, default: 'Dr. PPS Tomar' },
   isPublished: { type: Boolean, default: false },
   publishedAt: { type: Date },
   seo: { title: { type: String, default: '' }, description: { type: String, default: '' } },
