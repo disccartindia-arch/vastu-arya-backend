@@ -145,178 +145,91 @@ const services = [
     showOnHome: true,
     sortOrder: 6,
     seo: { title: 'Vastu Consultancy by Dr. PPS Tomar | Book @ ₹1100 | Vastu Arya', description: 'Personal consultation with IVAF certified Dr. PPS Tomar. Video/phone call. Book advance at ₹1,100 or full package ₹11,000.', keywords: 'vastu consultancy, vastu expert, Dr PPS, vastu consultation' }
-  }
+  },
 
   {
-    name: { en: 'Home Energy Vastu Analysis', hi: 'घर की ऊर्जा वास्तु विश्लेषण' },
+    title: { en: 'Home Energy Vastu Analysis', hi: 'घर की ऊर्जा वास्तु विश्लेषण' },
     slug: 'home-energy-analysis',
     category: 'vastu',
-    shortDesc: { en: 'Comprehensive energy audit of your home using advanced Vastu principles. Dr. PPS Tomar analyses every zone, direction and energy flow in your living space.', hi: 'उन्नत वास्तु सिद्धांतों का उपयोग करके आपके घर का व्यापक ऊर्जा ऑडिट।' },
-    description: { en: 'A complete Vastu energy analysis of your entire home by IVAF certified Dr. Pranveer Pratap Singh Tomar. This premium service includes analysis of all eight directions, entry points, room placements, colour energy, element balance, and remedies without demolition. Receive a written report with actionable remedies.', hi: 'IVAF प्रमाणित डॉ. पीपीएस तोमर द्वारा आपके पूरे घर का वास्तु ऊर्जा विश्लेषण।' },
-    benefits: [
+    shortDesc: { en: 'Comprehensive energy audit of your home using advanced Vastu principles.', hi: 'उन्नत वास्तु सिद्धांतों से आपके घर का व्यापक ऊर्जा ऑडिट।' },
+    description: { en: 'A complete Vastu energy analysis of your entire home by IVAF certified Dr. Pranveer Pratap Singh Tomar. Includes analysis of all eight directions, entry points, room placements, colour energy, element balance, and non-demolition remedies. Receive a detailed written report with actionable remedies.', hi: 'IVAF प्रमाणित डॉ. पीपीएस तोमर द्वारा आपके पूरे घर का वास्तु ऊर्जा विश्लेषण।' },
+    originalPrice: 3999, offerPrice: 2499, icon: '🏠',
+    features: [
       { en: 'Complete 8-direction energy analysis', hi: 'पूर्ण 8-दिशा ऊर्जा विश्लेषण' },
       { en: 'Room-by-room Vastu audit', hi: 'कमरे-दर-कमरे वास्तु ऑडिट' },
-      { en: 'No demolition remedies', hi: 'बिना तोड़-फोड़ के उपाय' },
+      { en: 'No demolition remedies only', hi: 'बिना तोड़-फोड़ के उपाय' },
       { en: 'Written report with actionable steps', hi: 'लिखित रिपोर्ट' },
     ],
-    icon: '🏠', originalPrice: 3999, offerPrice: 2499, currency: 'INR', duration: '60 minutes',
-    mode: 'video-call', isActive: true, isFeatured: true, isNewLaunch: false,
     formFields: ['name', 'phone', 'email', 'address', 'propertyType'],
-    seo: { title: 'Home Vastu Energy Analysis by Dr. PPS Tomar | Vastu Arya', description: 'Complete Vastu energy audit of your home by IVAF certified Dr. PPS Tomar. 8-direction analysis, written report, no demolition remedies.', keywords: 'home vastu analysis, vastu audit, vastu consultation, energy analysis' }
+    redirectType: 'razorpay', isActive: true, isFeatured: true, isNewLaunch: false, showOnHome: true, sortOrder: 7,
+    seo: { title: 'Home Vastu Energy Analysis | Dr. PPS Tomar | Vastu Arya', description: 'Complete Vastu energy audit by IVAF certified Dr. PPS Tomar. 8-direction analysis, written report, no demolition remedies.', keywords: 'home vastu analysis, vastu audit, energy analysis' }
   },
   {
-    name: { en: 'Business Vastu Consultation', hi: 'व्यापार वास्तु परामर्श' },
+    title: { en: 'Business Vastu Consultation', hi: 'व्यापार वास्तु परामर्श' },
     slug: 'business-vastu',
     category: 'vastu',
-    shortDesc: { en: 'Specialised Vastu consultation for shops, offices, factories and commercial spaces. Increase profits and remove obstacles to business growth.', hi: 'दुकान, ऑफिस, फैक्ट्री के लिए विशेष वास्तु परामर्श। लाभ बढ़ाएं।' },
-    description: { en: 'Business success is deeply connected to the Vastu of your commercial space. Dr. PPS Tomar's Business Vastu Consultation covers placement of cashbox, entrance, seating arrangement, owner's cabin, reception, storage and all zones that affect profitability, employee harmony and customer footfall. Ideal for shops, restaurants, offices, clinics and factories.', hi: 'व्यापारिक सफलता आपके वाणिज्यिक स्थान के वास्तु से गहराई से जुड़ी है।' },
-    benefits: [
-      { en: 'Cash box & safe optimal placement', hi: 'कैश बॉक्स की सर्वोत्तम स्थिति' },
-      { en: 'Entrance & signboard Vastu', hi: 'प्रवेश द्वार और साइनबोर्ड वास्तु' },
+    shortDesc: { en: 'Specialised Vastu for shops, offices, factories. Increase profits and remove business obstacles.', hi: 'दुकान, ऑफिस, फैक्ट्री के लिए विशेष वास्तु परामर्श।' },
+    description: { en: "Business success is deeply connected to the Vastu of your commercial space. Dr. PPS Tomar's consultation covers cash box placement, entrance, seating, owner's cabin, reception, storage and all zones affecting profitability, employee harmony and customer footfall. Ideal for shops, restaurants, offices, clinics and factories.", hi: 'व्यापारिक सफलता आपके वाणिज्यिक स्थान के वास्तु से गहराई से जुड़ी है।' },
+    originalPrice: 4999, offerPrice: 2999, icon: '🏢',
+    features: [
+      { en: 'Cash box and safe optimal placement', hi: 'कैश बॉक्स की सर्वोत्तम स्थिति' },
+      { en: 'Entrance and signboard Vastu', hi: 'प्रवेश द्वार और साइनबोर्ड वास्तु' },
       { en: 'Employee seating arrangement', hi: 'कर्मचारी बैठक व्यवस्था' },
       { en: 'Customer attraction remedies', hi: 'ग्राहक आकर्षण के उपाय' },
     ],
-    icon: '🏢', originalPrice: 4999, offerPrice: 2999, currency: 'INR', duration: '60 minutes',
-    mode: 'video-call', isActive: true, isFeatured: true, isNewLaunch: false,
     formFields: ['name', 'phone', 'email', 'businessType', 'address'],
-    seo: { title: 'Business Vastu Consultation | Increase Profits | Dr. PPS Tomar', description: 'Specialised business Vastu consultation by Dr. PPS Tomar. Covers shop, office, factory. Increase profits, attract customers, resolve employee issues.', keywords: 'business vastu, office vastu, shop vastu, commercial vastu, vastu for business' }
+    redirectType: 'razorpay', isActive: true, isFeatured: true, isNewLaunch: false, showOnHome: true, sortOrder: 8,
+    seo: { title: 'Business Vastu Consultation | Increase Profits | Dr. PPS Tomar', description: 'Business Vastu consultation by Dr. PPS Tomar. Covers shop, office, factory. Increase profits and resolve employee issues.', keywords: 'business vastu, office vastu, shop vastu' }
   },
   {
-    name: { en: 'Personalised Gemstone Guidance', hi: 'व्यक्तिगत रत्न मार्गदर्शन' },
+    title: { en: 'Personalised Gemstone Guidance', hi: 'व्यक्तिगत रत्न मार्गदर्शन' },
     slug: 'gemstone-guidance',
     category: 'astrology',
-    shortDesc: { en: 'Expert gemstone recommendation based on your birth chart by IVAF certified Dr. PPS Tomar. Wear the right stone to activate planetary benefits.', hi: 'आपकी जन्म कुंडली के आधार पर विशेषज्ञ रत्न अनुशंसा।' },
-    description: { en: 'Wearing the wrong gemstone can cause harm. Dr. PPS Tomar analyses your complete birth chart, current planetary periods (dasha), and life goals to recommend the correct gemstone(s) for you. Includes: which stone(s) to wear, which finger, which metal, weight/carat requirement, day to start wearing, and activation procedure. Guidance also covers which stones to avoid.', hi: 'गलत रत्न पहनना हानिकारक हो सकता है। डॉ. पीपीएस तोमर आपकी जन्म कुंडली का विश्लेषण करके सही रत्न की अनुशंसा करते हैं।' },
-    benefits: [
+    shortDesc: { en: 'Expert gemstone recommendation based on your birth chart by IVAF certified Dr. PPS Tomar.', hi: 'आपकी जन्म कुंडली के आधार पर विशेषज्ञ रत्न अनुशंसा।' },
+    description: { en: 'Wearing the wrong gemstone can cause harm. Dr. PPS Tomar analyses your complete birth chart, current planetary periods and life goals to recommend the correct gemstone(s). Covers: which stone to wear, which finger, which metal, carat requirement, auspicious day, activation mantra, and which stones to avoid.', hi: 'गलत रत्न पहनना हानिकारक हो सकता है। डॉ. पीपीएस तोमर सही रत्न की अनुशंसा करते हैं।' },
+    originalPrice: 2499, offerPrice: 1499, icon: '💎',
+    features: [
       { en: 'Complete birth chart analysis', hi: 'पूर्ण जन्म कुंडली विश्लेषण' },
       { en: 'Correct gemstone recommendation', hi: 'सही रत्न की अनुशंसा' },
-      { en: 'Which to wear & which to avoid', hi: 'क्या पहनें और क्या न पहनें' },
-      { en: 'Activation & wearing instructions', hi: 'सक्रियण और पहनने के निर्देश' },
+      { en: 'Which finger and metal to use', hi: 'कौन सी उंगली और धातु' },
+      { en: 'Activation mantra and procedure', hi: 'सक्रियण मंत्र और प्रक्रिया' },
     ],
-    icon: '💎', originalPrice: 2499, offerPrice: 1499, currency: 'INR', duration: '45 minutes',
-    mode: 'video-call', isActive: true, isFeatured: true, isNewLaunch: true,
     formFields: ['name', 'phone', 'email', 'dob', 'birthTime', 'birthPlace'],
-    seo: { title: 'Personalised Gemstone Guidance | Dr. PPS Tomar | Vastu Arya', description: 'Expert gemstone recommendation based on your birth chart. Know which stone to wear, on which finger, and how to activate it. By IVAF certified Dr. PPS Tomar.', keywords: 'gemstone recommendation, best gemstone for me, gemstone astrology, which gemstone to wear' }
+    redirectType: 'razorpay', isActive: true, isFeatured: true, isNewLaunch: true, showOnHome: true, sortOrder: 9,
+    seo: { title: 'Personalised Gemstone Guidance | Dr. PPS Tomar | Vastu Arya', description: 'Expert gemstone recommendation based on birth chart by IVAF certified Dr. PPS Tomar.', keywords: 'gemstone recommendation, which gemstone to wear, gemstone astrology' }
   },
   {
-    name: { en: 'Rudraksha Recommendation Session', hi: 'रुद्राक्ष अनुशंसा सत्र' },
+    title: { en: 'Rudraksha Recommendation Session', hi: 'रुद्राक्ष अनुशंसा सत्र' },
     slug: 'rudraksha-recommendation',
     category: 'astrology',
-    shortDesc: { en: 'Personalised Rudraksha recommendation by Dr. PPS Tomar based on your horoscope, life goals and spiritual needs. Find your ideal Rudraksha combination.', hi: 'आपकी कुंडली और जीवन लक्ष्यों के आधार पर व्यक्तिगत रुद्राक्ष अनुशंसा।' },
-    description: { en: 'Rudraksha beads are among the most powerful tools in Vedic tradition, but their effectiveness depends on choosing the right Mukhi (face count) for your chart and current life situation. Dr. PPS Tomar analyses your birth chart, running dasha periods and specific life challenges to recommend the ideal Rudraksha(s), along with proper wearing guidelines, mantras to chant and care instructions.', hi: 'रुद्राक्ष वैदिक परंपरा में सबसे शक्तिशाली उपकरणों में से हैं। डॉ. पीपीएस तोमर आपके लिए आदर्श रुद्राक्ष की अनुशंसा करते हैं।' },
-    benefits: [
+    shortDesc: { en: 'Personalised Rudraksha recommendation by Dr. PPS Tomar based on horoscope and life goals.', hi: 'कुंडली और जीवन लक्ष्यों के आधार पर व्यक्तिगत रुद्राक्ष अनुशंसा।' },
+    description: { en: 'Rudraksha effectiveness depends on choosing the right Mukhi for your chart. Dr. PPS Tomar analyses your birth chart, running dasha and specific challenges to recommend the ideal Rudraksha(s), with wearing guidelines, activation mantras, and care instructions.', hi: 'रुद्राक्ष की प्रभावशीलता सही मुखी के चुनाव पर निर्भर करती है।' },
+    originalPrice: 1999, offerPrice: 1199, icon: '🌰',
+    features: [
       { en: 'Horoscope-based Mukhi selection', hi: 'कुंडली आधारित मुखी चयन' },
-      { en: 'Correct wearing guidelines & mantras', hi: 'सही पहनने के दिशानिर्देश और मंत्र' },
-      { en: 'Multi-Rudraksha combinations', hi: 'बहु-रुद्राक्ष संयोजन' },
-      { en: 'Ongoing support included', hi: 'निरंतर सहायता शामिल' },
+      { en: 'Activation mantra provided', hi: 'सक्रियण मंत्र प्रदान किया गया' },
+      { en: 'Care and storage instructions', hi: 'देखभाल और भंडारण निर्देश' },
+      { en: 'Authentic sourcing guidance', hi: 'प्रामाणिक स्रोत मार्गदर्शन' },
     ],
-    icon: '🌰', originalPrice: 1999, offerPrice: 1199, currency: 'INR', duration: '30 minutes',
-    mode: 'video-call', isActive: true, isFeatured: false, isNewLaunch: true,
     formFields: ['name', 'phone', 'email', 'dob', 'birthTime', 'birthPlace'],
-    seo: { title: 'Rudraksha Recommendation by Dr. PPS Tomar | Vastu Arya', description: 'Personalised Rudraksha selection based on birth chart by IVAF certified Dr. PPS Tomar. Know which Mukhi Rudraksha to wear and how.', keywords: 'which rudraksha to wear, rudraksha recommendation, rudraksha for my kundli, rudraksha guidance' }
+    redirectType: 'razorpay', isActive: true, isFeatured: false, isNewLaunch: true, showOnHome: false, sortOrder: 10,
+    seo: { title: 'Rudraksha Recommendation by Dr. PPS Tomar | Vastu Arya', description: 'Personalised Rudraksha selection based on birth chart by IVAF certified Dr. PPS Tomar.', keywords: 'rudraksha recommendation, which rudraksha to wear' }
   },
   {
-    name: { en: 'New Property Vastu Check', hi: 'नई संपत्ति वास्तु जांच' },
+    title: { en: 'New Property Vastu Check', hi: 'नई संपत्ति वास्तु जांच' },
     slug: 'new-property-vastu',
     category: 'vastu',
-    shortDesc: { en: 'Before buying or renting a new home or office, get a Vastu check by Dr. PPS Tomar. Avoid costly mistakes and choose a property that supports your growth.', hi: 'नया घर या ऑफिस खरीदने से पहले वास्तु जांच करवाएं।' },
-    description: { en: 'The property you choose shapes your destiny. Before investing in a new home, plot, flat or commercial space, have Dr. PPS Tomar assess its Vastu. Submit floor plans, site photographs and location details. Receive a detailed Vastu assessment covering: entry, kitchen, master bedroom, toilet placements, plot shape, road-facing direction, and a go/no-go recommendation with remedy options if defects are found.', hi: 'नई संपत्ति में निवेश करने से पहले डॉ. पीपीएस तोमर से वास्तु मूल्यांकन करवाएं।' },
-    benefits: [
-      { en: 'Floor plan & photo analysis', hi: 'फ्लोर प्लान और फोटो विश्लेषण' },
+    shortDesc: { en: 'Check Vastu before buying or renting. Avoid costly mistakes with Dr. PPS Tomar.', hi: 'नया घर या ऑफिस खरीदने से पहले वास्तु जांच करवाएं।' },
+    description: { en: 'The property you choose shapes your destiny. Before investing in a new home, plot, flat or commercial space, let Dr. PPS Tomar assess its Vastu. Submit floor plans and photographs. Receive a detailed assessment with entry, kitchen, master bedroom, toilet placements, plot shape, road-facing direction and a clear go/no-go recommendation.', hi: 'नई संपत्ति में निवेश करने से पहले वास्तु मूल्यांकन करवाएं।' },
+    originalPrice: 2999, offerPrice: 1999, icon: '🏗️',
+    features: [
+      { en: 'Floor plan and photo analysis', hi: 'फ्लोर प्लान और फोटो विश्लेषण' },
       { en: 'Go/no-go purchase recommendation', hi: 'खरीदें/न खरीदें की सिफारिश' },
-      { en: 'Entry, bedroom, kitchen analysis', hi: 'प्रवेश, शयनकक्ष, रसोई विश्लेषण' },
+      { en: 'Entry bedroom kitchen analysis', hi: 'प्रवेश शयनकक्ष रसोई विश्लेषण' },
       { en: 'Remedy options if defects found', hi: 'दोष मिलने पर उपाय' },
     ],
-    icon: '🏗️', originalPrice: 2999, offerPrice: 1999, currency: 'INR', duration: '45 minutes',
-    mode: 'video-call', isActive: true, isFeatured: false, isNewLaunch: true,
     formFields: ['name', 'phone', 'email', 'propertyType', 'address'],
-    seo: { title: 'New Property Vastu Check | Before You Buy | Dr. PPS Tomar', description: 'Vastu assessment of new home, flat, plot or office before purchase by IVAF certified Dr. PPS Tomar. Go/no-go recommendation with remedy options.', keywords: 'new home vastu check, property vastu, plot vastu, vastu before buying home' }
+    redirectType: 'razorpay', isActive: true, isFeatured: false, isNewLaunch: true, showOnHome: false, sortOrder: 11,
+    seo: { title: 'New Property Vastu Check | Before You Buy | Dr. PPS Tomar', description: 'Vastu assessment of new home, flat, plot or office before purchase by IVAF certified Dr. PPS Tomar.', keywords: 'new home vastu check, property vastu, plot vastu' }
   },
-];
 
-const products = [
-  { name: { en: '7 Chakra Rudraksha Bracelet', hi: '7 चक्र रुद्राक्ष ब्रेसलेट' }, slug: '7-chakra-rudraksha-bracelet', category: 'rudraksha', description: { en: 'Balances all 7 chakras. Promotes peace, health and prosperity.', hi: 'सभी 7 चक्रों को संतुलित करता है।' }, benefits: ['Balances energy', 'Reduces stress', 'Promotes positive aura', 'Enhances mental clarity'], price: 1999, offerPrice: 999, images: [], stock: 50, isFeatured: true, isNewLaunch: false },
-  { name: { en: 'Natural Citrine Gemstone Pendant', hi: 'प्राकृतिक सिट्रीन रत्न पेंडेंट' }, slug: 'citrine-gemstone-pendant', category: 'gemstone-pendants', description: { en: 'Natural citrine for wealth, success and positive energy.', hi: 'धन, सफलता के लिए प्राकृतिक सिट्रीन।' }, benefits: ['Attracts wealth', 'Boosts confidence', 'Removes negativity', 'Enhances creativity'], price: 3500, offerPrice: 1750, images: [], stock: 25, isFeatured: true, isNewLaunch: false },
-  { name: { en: 'Shree Yantra (Gold Plated)', hi: 'श्री यंत्र (सोना चढ़ा)' }, slug: 'shree-yantra-gold-plated', category: 'yantras', description: { en: 'Sacred Shree Yantra for wealth and prosperity.', hi: 'धन और समृद्धि के लिए पवित्र श्री यंत्र।' }, benefits: ['Attracts wealth and prosperity', 'Removes financial obstacles', 'Brings positive energy', 'Sacred Lakshmi yantra'], price: 2500, offerPrice: 1299, images: [], stock: 30, isFeatured: true, isNewLaunch: true },
-  { name: { en: 'Panchmukhi Rudraksha Mala', hi: 'पंचमुखी रुद्राक्ष माला' }, slug: 'panchmukhi-rudraksha-mala', category: 'sacred-mala', description: { en: '108 bead Panchmukhi Rudraksha mala for meditation and spiritual growth.', hi: 'ध्यान और आध्यात्मिक विकास के लिए 108 दाने की माला।' }, benefits: ['Enhances meditation', 'Promotes spiritual growth', 'Reduces anxiety', 'Brings divine blessings'], price: 2999, offerPrice: 1499, images: [], stock: 40, isFeatured: false, isNewLaunch: true },
-  { name: { en: 'Vastu Crystal Pyramid', hi: 'वास्तु क्रिस्टल पिरामिड' }, slug: 'vastu-crystal-pyramid', category: 'yantras', description: { en: 'Clear quartz pyramid for positive Vastu energy in your home.', hi: 'घर में सकारात्मक वास्तु ऊर्जा के लिए स्पष्ट क्वार्ट्ज पिरामिड।' }, benefits: ['Amplifies positive energy', 'Removes Vastu defects', 'Enhances harmony', 'Improves prosperity'], price: 1500, offerPrice: 799, images: [], stock: 60, isFeatured: true, isNewLaunch: true },
-];
-
-async function seed() {
-  try {
-    await mongoose.connect(MONGO_URI);
-    console.log('✅ MongoDB connected for seeding');
-
-    // Seed Admin
-    const existingAdmin = await User.findOne({ email: 'Vastuarya@Admin.com' });
-    if (!existingAdmin) {
-      await User.create({
-        name: 'Dr. PPS Tomar - Vastu Arya',
-        email: 'Vastuarya@Admin.com',
-        password: 'Admin@2407@',
-        role: 'admin',
-        phone: '+91-0000000000',
-      });
-      console.log('✅ Admin user seeded: Vastuarya@Admin.com / Admin@2407@');
-    } else {
-      console.log('ℹ️  Admin already exists');
-    }
-
-    // Seed Services
-    for (const service of services) {
-      const existing = await Service.findOne({ slug: service.slug });
-      if (!existing) {
-        await Service.create(service);
-        console.log(`✅ Service seeded: ${service.title.en}`);
-      }
-    }
-
-    // Seed Products
-    for (const product of products) {
-      const existing = await Product.findOne({ slug: product.slug });
-      if (!existing) {
-        await Product.create(product);
-        console.log(`✅ Product seeded: ${product.name.en}`);
-      }
-    }
-
-    // Seed Site Settings
-    const existingSettings = await SiteSettings.findOne();
-    if (!existingSettings) {
-      await SiteSettings.create({
-        siteName: 'Vastu Arya',
-        tagline: { en: 'Transform Your Space, Transform Your Life', hi: 'अपना जीवन बदलें, अपना वास्तु बदलें' },
-        phone: '+91-7000343804',
-        whatsappNumber: '917000343804',
-        email: 'contact@vastuarya.com',
-        address: 'New Delhi, India',
-        seo: { defaultTitle: 'Vastu Arya - Premium Vastu & Astrology Consultancy | IVAF Certified', defaultDescription: 'India\'s premier Vastu Shastra, Astrology, Numerology consultation platform by Dr. PPS Tomar - IVAF Certified Expert. Book appointment at just ₹11.' },
-      });
-      console.log('✅ Site settings seeded');
-    }
-
-    // Seed Slider
-    const existingSlider = await Slider.findOne();
-    if (!existingSlider) {
-      await Slider.create({
-        title: 'Transform Your Space, Transform Your Life',
-        subtitle: 'IVAF Certified Expert Dr. PPS Tomar • 15+ Years Experience • 10,000+ Happy Clients',
-        image: '/images/hero-bg.jpg',
-        ctaText: '📅 Book Appointment @ ₹11',
-        ctaLink: '/book-appointment',
-        isActive: true,
-        sortOrder: 1,
-      });
-      console.log('✅ Slider seeded');
-    }
-
-    console.log('\n🎉 Seeding completed successfully!');
-    console.log('Admin Login: Vastuarya@Admin.com / Admin@2407@');
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Seeding failed:', error);
-    process.exit(1);
-  }
-}
-
-seed();
