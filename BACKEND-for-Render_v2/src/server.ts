@@ -30,6 +30,7 @@ import postRoutes from './routes/post.routes';
 import aiRoutes from './routes/ai.routes';
 
 import aiSettingsRoutes from './routes/aiSettings.routes';
+import productGeneratorRoutes from './routes/productGenerator.routes';
 import { errorMiddleware } from './middleware/error.middleware';
 
 const app = express();
@@ -72,6 +73,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/posts', postRoutes);
 
 app.use('/api/ai', aiRoutes);
+app.use('/api/product-generator', productGeneratorRoutes);
 app.use('/api/ai-settings', aiSettingsRoutes);
 
 app.use('*', (req: any, res: any) => res.status(404).json({ success: false, message: 'Route not found' }));
