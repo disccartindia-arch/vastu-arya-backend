@@ -37,9 +37,27 @@ import { seedDatabase } from './utils/seed';
 const app = express();
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
-// CORS — allow all origins
+// CORS — in production, whitelist only FRONTEND_URL; in development, allow all
+const FRONTEND_URL = env.FRONTEND_URL || '';
+const isProduction = env.NODE_ENV === 'production';
+
 app.use(cors({
-  origin: (origin: any, callback: any) => { callback(null, true); },
+  origin: (origin: any, callback: any) => {
+    // Allow requests with no origin (server-to-server, curl, Postman)
+    if (!origin) return callback(null, true);
+    // In development: allow all
+    if (!isProduction) return callback(null, true);
+    // In production: allow only known frontend origins
+    const allowed = [
+      FRONTEND_URL,
+      'https://vastuarya.vercel.app',
+      'https://vastuarya.com',
+      'https://www.vastuarya.com',
+    ].filter(Boolean);
+    if (allowed.includes(origin)) return callback(null, true);
+    con.warn(`[CORS] Blocked origin: ${origin}`);
+    return callback(new Error(`CORS policy: origin ${origin} not allowed`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-session-id'],

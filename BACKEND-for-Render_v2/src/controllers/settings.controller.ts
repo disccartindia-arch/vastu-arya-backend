@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import SiteSettings from '../models/SiteSettings';
+import SiteSettings, { ISiteSettings } from '../models/SiteSettings';
 import Popup from '../models/Popup';
 import Slider from '../models/Slider';
 
@@ -15,7 +15,17 @@ export const getSettings = async (req: Request, res: Response) => {
 
 export const updateSettings = async (req: Request, res: Response) => {
   try {
-    const settings = await SiteSettings.findOneAndUpdate({}, req.body, { new: true, upsert: true });
+    // Whitelist allowed top-level fields — prevents arbitrary document overwrites
+    const ALLOWED: (keyof ISiteSettings)[] = [
+      'siteName', 'tagline', 'logo', 'favicon', 'phone', 'whatsappNumber',
+      'email', 'address', 'socialLinks', 'razorpayKeyId', 'seo',
+      'enableHindi', 'maintenanceMode', 'smtpConfig',
+    ];
+    const update: Partial<ISiteSettings> = {};
+    for (const key of ALLOWED) {
+      if (req.body[key] !== undefined) (update as any)[key] = req.body[key];
+    }
+    const settings = await SiteSettings.findOneAndUpdate({}, update, { new: true, upsert: true, runValidators: true });
     res.json({ success: true, message: 'Settings updated', data: settings });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

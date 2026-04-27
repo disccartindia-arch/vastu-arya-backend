@@ -3,52 +3,19 @@ import { Router, Request, Response } from 'express';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
 import AISettings from '../models/AISettings';
 import rateLimit from 'express-rate-limit';
+import { callAI, parseAIJson, sanitiseUserInput } from '../utils/ai.service';
 
 const router  = Router();
 const con     = (console as any);
 const genLimit = rateLimit({ windowMs: 60 * 1000, max: 10, message: { success: false, message: 'Rate limit reached' } });
 
-function getGeminiKey() {
-  const e = (process as any).env;
-  return e.GEMINI_API_KEY || e.GOOGLE_AI_API_KEY || e.GOOGLE_API_KEY || null;
-}
-function getAnthropicKey() {
-  const e = (process as any).env;
-  return e.ANTHROPIC_API_KEY || e.CLAUDE_API_KEY || null;
-}
-
-async function callAI(prompt: string): Promise<string> {
-  const gk = getGeminiKey();
-  const ak = getAnthropicKey();
-
-  if (gk) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${gk}`;
-    const res = await fetch(url, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ contents:[{role:'user',parts:[{text:prompt}]}], generationConfig:{temperature:0.7,maxOutputTokens:1200} }),
-    });
-    if (!res.ok) throw new Error(`Gemini ${res.status}`);
-    const d: any = await res.json();
-    return d?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  }
-
-  if (ak) {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':ak,'anthropic-version':'2023-06-01'},
-      body: JSON.stringify({ model:'claude-3-haiku-20240307', max_tokens:1200, messages:[{role:'user',content:prompt}] }),
-    });
-    if (!res.ok) throw new Error(`Anthropic ${res.status}`);
-    const d: any = await res.json();
-    return d?.content?.[0]?.text || '';
-  }
-
-  throw new Error('No AI key configured');
-}
-
 router.post('/generate', authMiddleware, adminMiddleware, genLimit, async (req: Request, res: Response) => {
   try {
-    const { input, category } = req.body;
+    const rawInput   = req.body?.input;
+    const rawCat     = req.body?.category;
+    const input    = sanitiseUserInput(String(rawInput || ''), 300);
+    const category = sanitiseUserInput(String(rawCat   || 'spiritual'), 80);
+
     if (!input || input.trim().length < 3) {
       return res.status(400).json({ success: false, message: 'Product name/description required' });
     }
@@ -91,7 +58,8 @@ Rules:
 
     let rawText = '';
     try {
-      rawText = await callAI(prompt);
+      const result = await callAI('You are a premium spiritual product copywriter.', prompt);
+      rawText = result.text;
     } catch (aiErr: any) {
       con.warn('[ProductGen] AI call failed:', aiErr.message, '— using template');
       // Template fallback
@@ -111,8 +79,7 @@ Rules:
     // Parse JSON from AI response
     let parsed: any;
     try {
-      const m = rawText.match(/\{[\s\S]*\}/);
-      parsed = m ? JSON.parse(m[0]) : null;
+      parsed = parseAIJson(rawText);
     } catch { parsed = null; }
 
     if (!parsed) {
@@ -126,6 +93,7 @@ Rules:
     parsed.isNewLaunch = parsed.isNewLaunch ?? true;
     parsed.images      = parsed.images      || [''];
 
+    const { getGeminiKey } = await import('../utils/ai.service');
     res.json({ success: true, data: parsed, source: getGeminiKey() ? 'gemini' : 'anthropic' });
   } catch (err: any) {
     con.error('[ProductGen] Error:', err);

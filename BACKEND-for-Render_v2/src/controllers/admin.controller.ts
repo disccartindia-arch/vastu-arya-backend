@@ -55,10 +55,35 @@ export const getAllUsers = async (req: Request, res: Response) => {
   }
 };
 
-export const updateUser = async (req: Request, res: Response) => {
+export const updateUser = async (req: (Request & { user?: any }), res: Response) => {
   try {
+    const targetId = req.params.id;
+
+    // Prevent admin from deactivating or demoting their own account
+    if (req.user && String(req.user._id) === String(targetId)) {
+      return res.status(400).json({ success: false, message: 'You cannot modify your own admin account.' });
+    }
+
+    // Whitelist only safe, known fields — no arbitrary updates
     const { role, isActive } = req.body;
-    const user = await User.findByIdAndUpdate(req.params.id, { role, isActive }, { new: true }).select('-password');
+    const update: Record<string, any> = {};
+
+    if (isActive !== undefined) {
+      update.isActive = Boolean(isActive);
+    }
+    if (role !== undefined) {
+      const VALID_ROLES = ['user', 'admin'];
+      if (!VALID_ROLES.includes(role)) {
+        return res.status(400).json({ success: false, message: `Invalid role. Allowed: ${VALID_ROLES.join(', ')}` });
+      }
+      update.role = role;
+    }
+
+    if (!Object.keys(update).length) {
+      return res.status(400).json({ success: false, message: 'No valid fields to update.' });
+    }
+
+    const user = await User.findByIdAndUpdate(targetId, update, { new: true, runValidators: true }).select('-password');
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, message: 'User updated', data: user });
   } catch (error: any) {

@@ -2,115 +2,19 @@
 import { Router, Request, Response } from 'express';
 import AISettings from '../models/AISettings';
 import rateLimit from 'express-rate-limit';
+import {
+  callAI, parseAIJson, getGeminiKey, getAnthropicKey,
+  sanitiseUserInput, logProviderStatusOnce,
+} from '../utils/ai.service';
 
 const router = Router();
 const con = (console as any);
-const env = (process as any).env;
 
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 15,
   message: { success: false, message: 'Too many requests. Please wait a minute.' },
 });
-
-// ── Resolve env var with multiple possible names ──────────────────────────────
-// Render users might name them differently — we check all common variants
-function getGeminiKey(): string | null {
-  return (
-    env.GEMINI_API_KEY         ||   // standard
-    env.GOOGLE_AI_API_KEY      ||   // google ai studio default
-    env.GOOGLE_API_KEY         ||   // generic
-    env.GOOGLE_GEMINI_API_KEY  ||   // explicit
-    null
-  );
-}
-
-function getAnthropicKey(): string | null {
-  return (
-    env.ANTHROPIC_API_KEY      ||   // standard
-    env.CLAUDE_API_KEY         ||   // alternative
-    null
-  );
-}
-
-// ── Log available providers on first request (once) ──────────────────────────
-let loggedOnce = false;
-function logProviders() {
-  if (loggedOnce) return;
-  loggedOnce = true;
-  const g = getGeminiKey();
-  const a = getAnthropicKey();
-  con.log('[AI] Provider status:');
-  con.log(`  Gemini  : ${g ? '✓ key loaded (' + g.slice(0,8) + '...)' : '✗ not set'}`);
-  con.log(`  Anthropic: ${a ? '✓ key loaded (' + a.slice(0,8) + '...)' : '✗ not set'}`);
-  if (!g && !a) con.log('[AI] No keys found — will use demo mode');
-}
-
-// ── Call Google Gemini ────────────────────────────────────────────────────────
-async function callGemini(systemPrompt: string, userMessage: string): Promise<string> {
-  const apiKey = getGeminiKey();
-  if (!apiKey) throw new Error('Gemini key not configured');
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1000 },
-    }),
-  });
-
-  if (!res.ok) {
-    const err: any = await res.json().catch(() => ({}));
-    throw new Error(`Gemini ${res.status}: ${err?.error?.message || res.statusText}`);
-  }
-  const data: any = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Gemini returned empty response');
-  return text;
-}
-
-// ── Call Anthropic Claude ─────────────────────────────────────────────────────
-async function callAnthropic(systemPrompt: string, userMessage: string): Promise<string> {
-  const apiKey = getAnthropicKey();
-  if (!apiKey) throw new Error('Anthropic key not configured');
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 1000,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    }),
-  });
-
-  if (!res.ok) {
-    const err: any = await res.json().catch(() => ({}));
-    throw new Error(`Anthropic ${res.status}: ${err?.error?.message || res.statusText}`);
-  }
-  const data: any = await res.json();
-  const text = data?.content?.[0]?.text;
-  if (!text) throw new Error('Anthropic returned empty response');
-  return text;
-}
-
-// ── Parse JSON from AI response ───────────────────────────────────────────────
-function parseAIJson(raw: string): any | null {
-  // Try direct parse first
-  try { return JSON.parse(raw.trim()); } catch {}
-  // Extract JSON block
-  const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  try { return JSON.parse(m[0]); } catch { return null; }
-}
 
 // ── Load AI settings (with inline fallback, no crash) ────────────────────────
 async function loadSettings(): Promise<any> {
@@ -154,10 +58,18 @@ function buildDemo(concern: string, s: any) {
 // ── Main analysis route ───────────────────────────────────────────────────────
 router.post('/vastu-analysis', aiLimiter, async (req: Request, res: Response) => {
   try {
-    logProviders();
+    logProviderStatusOnce();
 
-    const { concern, roomType, direction } = req.body;
-    if (!concern || String(concern).trim().length < 10) {
+    const rawConcern   = req.body?.concern;
+    const rawRoomType  = req.body?.roomType;
+    const rawDirection = req.body?.direction;
+
+    // Sanitise user inputs against prompt injection
+    const concern   = sanitiseUserInput(String(rawConcern   || ''), 800);
+    const roomType  = sanitiseUserInput(String(rawRoomType  || ''), 80);
+    const direction = sanitiseUserInput(String(rawDirection || ''), 40);
+
+    if (!concern || concern.trim().length < 10) {
       return res.status(400).json({ success: false, message: 'Please describe your concern in more detail.' });
     }
 
@@ -169,7 +81,7 @@ router.post('/vastu-analysis', aiLimiter, async (req: Request, res: Response) =>
     // No keys at all — return demo
     if (!hasGemini && !hasAnthropic) {
       con.log('[AI] Demo mode — no API keys configured');
-      return res.json({ success: true, isDemo: true, data: buildDemo(String(concern), s) });
+      return res.json({ success: true, isDemo: true, data: buildDemo(concern, s) });
     }
 
     // Build prompts
@@ -190,41 +102,20 @@ router.post('/vastu-analysis', aiLimiter, async (req: Request, res: Response) =>
         : `\nDo NOT include a consultationCTA.`,
     ].filter(Boolean).join('\n');
 
-    // Try providers
+    // Call AI via centralised service
     let rawText = '';
     let source  = '';
 
-    if (hasGemini) {
-      try {
-        rawText = await callGemini(systemPrompt, userMessage);
-        source  = 'gemini';
-        con.log('[AI] Gemini response received');
-      } catch (e: any) {
-        con.error('[AI] Gemini failed:', e.message);
-        // fallback to Anthropic if available
-        if (hasAnthropic) {
-          try {
-            rawText = await callAnthropic(systemPrompt, userMessage);
-            source  = 'anthropic-fallback';
-            con.log('[AI] Anthropic fallback used');
-          } catch (e2: any) {
-            con.error('[AI] Anthropic fallback also failed:', e2.message);
-            return res.json({ success: true, isDemo: true, data: buildDemo(String(concern), s) });
-          }
-        } else {
-          return res.json({ success: true, isDemo: true, data: buildDemo(String(concern), s) });
-        }
+    try {
+      const result = await callAI(systemPrompt, userMessage);
+      rawText = result.text;
+      source  = result.source;
+    } catch (e: any) {
+      if (e.message === 'NO_PROVIDER' || e.message === 'ALL_PROVIDERS_FAILED') {
+        con.warn('[AI] All providers failed, falling back to demo');
+        return res.json({ success: true, isDemo: true, data: buildDemo(concern, s) });
       }
-    } else {
-      // Anthropic only
-      try {
-        rawText = await callAnthropic(systemPrompt, userMessage);
-        source  = 'anthropic';
-        con.log('[AI] Anthropic response received');
-      } catch (e: any) {
-        con.error('[AI] Anthropic failed:', e.message);
-        return res.json({ success: true, isDemo: true, data: buildDemo(String(concern), s) });
-      }
+      throw e;
     }
 
     // Parse
