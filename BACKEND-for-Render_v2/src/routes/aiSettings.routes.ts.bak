@@ -5,37 +5,7 @@ import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// ── PUBLIC: returns only safe fields needed by the frontend UI ────────────────
-// No auth required — never exposes systemPrompt, keys, or admin-only data
-router.get('/public', async (req: Request, res: Response) => {
-  try {
-    const s = await AISettings.findOne().select(
-      'quickSuggestions ctaText showConsultationCTA trustedAdviceBlocks'
-    );
-    res.json({
-      success: true,
-      data: {
-        quickSuggestions:    s?.quickSuggestions    || [],
-        ctaText:             s?.ctaText             || 'Book a Consultation with Dr. PPS Tomar',
-        showConsultationCTA: s?.showConsultationCTA ?? true,
-        // expose only titles of advice blocks (not full content — that stays server-side)
-        adviceBlockTitles:   (s?.trustedAdviceBlocks || []).map((b: any) => b.title).filter(Boolean),
-      },
-    });
-  } catch {
-    res.json({
-      success: true,
-      data: {
-        quickSuggestions: [],
-        ctaText: 'Book a Consultation with Dr. PPS Tomar',
-        showConsultationCTA: true,
-        adviceBlockTitles: [],
-      },
-    });
-  }
-});
-
-// ── ADMIN: full settings read ─────────────────────────────────────────────────
+// GET — returns settings (creates defaults if first time)
 router.get('/', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     let settings = await AISettings.findOne();
@@ -46,7 +16,7 @@ router.get('/', authMiddleware, adminMiddleware, async (req: Request, res: Respo
   }
 });
 
-// ── ADMIN: update settings ────────────────────────────────────────────────────
+// PUT — update settings
 router.put('/', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     const allowed = [
@@ -65,7 +35,7 @@ router.put('/', authMiddleware, adminMiddleware, async (req: Request, res: Respo
   }
 });
 
-// ── ADMIN: reset to defaults ──────────────────────────────────────────────────
+// POST — reset to defaults
 router.post('/reset', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     await AISettings.deleteMany({});
