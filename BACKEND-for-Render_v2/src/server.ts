@@ -28,7 +28,6 @@ import homepageRoutes from './routes/homepage.routes';
 import searchRoutes from './routes/search.routes';
 import postRoutes from './routes/post.routes';
 import aiRoutes from './routes/ai.routes';
-
 import aiSettingsRoutes from './routes/aiSettings.routes';
 import productGeneratorRoutes from './routes/productGenerator.routes';
 import { errorMiddleware } from './middleware/error.middleware';
@@ -37,24 +36,43 @@ import { seedDatabase } from './utils/seed';
 const app = express();
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
-// CORS — in production, whitelist only FRONTEND_URL; in development, allow all
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+// Priority order:
+//   1. FRONTEND_URL env var (set this in Render to your production domain)
+//   2. Hardcoded production domains (vastuarya.com + www)
+//   3. Any *.vercel.app preview URL (covers all Vercel preview deployments)
+//   4. localhost for local dev
+
 const FRONTEND_URL = env.FRONTEND_URL || '';
 const isProduction = env.NODE_ENV === 'production';
 
+// Static allowed origins
+const STATIC_ORIGINS = [
+  FRONTEND_URL,
+  'https://vastuarya.com',
+  'https://www.vastuarya.com',
+  'https://vastu-arya-frontend.vercel.app',
+  'https://vastuarya.vercel.app',
+].filter(Boolean);
+
+// Pattern-based allowed origins (covers all Vercel preview URLs)
+const ALLOWED_PATTERNS = [
+  /^https:\/\/vastu-arya-frontend.*\.vercel\.app$/,   // all preview deploys
+  /^https:\/\/vastuarya.*\.vercel\.app$/,             // any vastuarya* vercel URL
+  /^http:\/\/localhost(:\d+)?$/,                      // local dev
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/,                  // local dev alt
+];
+
+function isOriginAllowed(origin: string): boolean {
+  if (STATIC_ORIGINS.includes(origin)) return true;
+  return ALLOWED_PATTERNS.some(pattern => pattern.test(origin));
+}
+
 app.use(cors({
   origin: (origin: any, callback: any) => {
-    // Allow requests with no origin (server-to-server, curl, Postman)
+    // Allow requests with no origin (server-to-server, curl, Postman, mobile apps)
     if (!origin) return callback(null, true);
-    // In development: allow all
-    if (!isProduction) return callback(null, true);
-    // In production: allow only known frontend origins
-    const allowed = [
-      FRONTEND_URL,
-      'https://vastuarya.vercel.app',
-      'https://vastuarya.com',
-      'https://www.vastuarya.com',
-    ].filter(Boolean);
-    if (allowed.includes(origin)) return callback(null, true);
+    if (isOriginAllowed(origin)) return callback(null, true);
     con.warn(`[CORS] Blocked origin: ${origin}`);
     return callback(new Error(`CORS policy: origin ${origin} not allowed`));
   },
@@ -63,11 +81,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-session-id'],
   optionsSuccessStatus: 200,
 }));
+
+// Handle preflight for all routes
 app.options('*', cors());
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-// Legacy local uploads — new uploads go to Cloudinary. This serves any old local files that may remain.
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 if (env.NODE_ENV !== 'production') app.use(morgan('dev'));
 
@@ -91,7 +110,6 @@ app.use('/api/config', configRoutes);
 app.use('/api/homepage', homepageRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/posts', postRoutes);
-
 app.use('/api/ai', aiRoutes);
 app.use('/api/product-generator', productGeneratorRoutes);
 app.use('/api/ai-settings', aiSettingsRoutes);
@@ -106,8 +124,7 @@ const connectAndStart = async () => {
     if (!env.MONGO_URI) throw new Error('MONGO_URI not set');
     await mongoose.connect(env.MONGO_URI as string);
     con.log('MongoDB connected');
-    // Auto-seed services on startup (safe — skips existing)
-    seedDatabase().catch(e => con.warn('[Seed] Auto-seed warning:', e.message));
+    seedDatabase().catch((e: any) => con.warn('[Seed] Auto-seed warning:', e.message));
     app.listen(PORT, () => con.log(`Vastu Arya API v3.0 on port ${PORT}`));
   } catch (error) {
     con.error('Startup failed:', error);
