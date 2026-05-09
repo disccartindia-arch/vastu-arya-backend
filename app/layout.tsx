@@ -1,3 +1,4 @@
+// app/layout.tsx — Fix #5: GSC verification token made env-driven
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster }         from 'react-hot-toast';
@@ -14,12 +15,12 @@ export const metadata: Metadata = {
     default:  'Vastu Arya - IVAF Certified Vastu and Astrology Consultancy | Dr. PPS Tomar',
     template: '%s | Vastu Arya',
   },
-  description: "India's premier Vastu Shastra, Astrology and Numerology platform by Dr. PPS Tomar - IVAF Certified Expert. 45,000+ happy clients. Book from just Rs.11.",
+  description: "India's premier Vastu Shastra, Astrology and Numerology platform by Dr. PPS Tomar - IVAF Certified Expert. 73,000+ happy clients. Book from just Rs.11.",
   keywords: ['vastu shastra','vastu expert India','vastu arya','Dr PPS Tomar','IVAF certified vastu consultant','astrology consultation','numerology expert','online vastu consultation','home vastu','business vastu','vastu remedies','gemstone guidance','rudraksha consultation','vastu new delhi'],
   alternates: { canonical: 'https://www.vastuarya.com/' },
   openGraph: {
     title:       'Vastu Arya - Transform Your Space, Transform Your Life',
-    description: "India's premier Vastu and Astrology platform by IVAF Certified Expert Dr. PPS Tomar. 45,000+ Happy Clients.",
+    description: "India's premier Vastu and Astrology platform by IVAF Certified Expert Dr. PPS Tomar. 73,000+ Happy Clients.",
     url:         'https://www.vastuarya.com',
     siteName:    'Vastu Arya',
     locale:      'en_IN',
@@ -36,7 +37,10 @@ export const metadata: Metadata = {
   },
   robots:       { index: true, follow: true, googleBot: { index: true, follow: true } },
   icons:        { icon: '/logo.jpg', apple: '/logo.jpg' },
-  verification: { google: 'XXXXXX' },
+  // Fix #5 — env-driven GSC token. Add NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION to Vercel env vars.
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

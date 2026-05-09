@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { blogsAPI } from '../../../lib/api';
 import ImageUploader from '../../../components/admin/ImageUploader';
+import MobileImageUpload from '../../../components/admin/MobileImageUpload';
 import toast from 'react-hot-toast';
 import { Plus, Edit2, Trash2, X, Save, Search, Eye, ToggleLeft, ToggleRight } from 'lucide-react';
 
@@ -87,7 +88,7 @@ export default function BlogsPage() {
               <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={modal.isPublished} onChange={e=>setModal((p:any)=>({...p,isPublished:e.target.checked}))} className="rounded"/><span className="text-sm font-medium">Publish immediately</span></label>
               <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Excerpt ({tab.toUpperCase()})</label><textarea value={modal.excerpt?.[tab]||''} onChange={e=>setModal((p:any)=>({...p,excerpt:{...p.excerpt,[tab]:e.target.value}}))} rows={2} className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-primary resize-none"/></div>
               <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Content ({tab.toUpperCase()})</label><textarea value={modal.content?.[tab]||''} onChange={e=>setModal((p:any)=>({...p,content:{...p.content,[tab]:e.target.value}}))} rows={12} className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm font-mono focus:outline-none focus:border-primary resize-none" placeholder="Supports HTML markup…"/></div>
-              <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Cover Image URL</label><input value={modal.coverImage||''} onChange={e=>setModal((p:any)=>({...p,coverImage:e.target.value}))} placeholder="https://res.cloudinary.com/…" className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-primary"/></div>
+              <MobileImageUpload value={modal.coverImage||''} onChange={(url:string)=>setModal((p:any)=>({...p,coverImage:url}))} label="Cover Photo" height="h-36"/>
               <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Tags (comma-separated)</label><input value={(modal.tags||[]).join(', ')} onChange={e=>setModal((p:any)=>({...p,tags:e.target.value.split(',').map((t:string)=>t.trim()).filter(Boolean)}))} className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-primary"/></div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div><label className="block text-xs font-medium text-gray-500 mb-1.5">SEO Title</label><input value={modal.seo?.title||''} onChange={e=>setModal((p:any)=>({...p,seo:{...p.seo,title:e.target.value}}))} className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-primary"/></div>
