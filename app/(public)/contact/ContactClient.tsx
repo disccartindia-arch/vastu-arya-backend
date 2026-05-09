@@ -17,7 +17,7 @@ export default function ContactPage() {
     e.preventDefault();
     if (!form.name || !form.email || !form.message) return toast.error('Fill all required fields');
     setSending(true); await new Promise(r=>setTimeout(r,1500));
-    toast.success('Message sent! We'll reply within 24 hours.');
+    toast.success('Message sent! We will reply within 24 hours.');
     setForm({ name:'', email:'', phone:'', message:'' }); setSending(false);
   };
   return (<><Navbar /><main>
