@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { adminAPI, aiStatusAPI } from '../../lib/api';
+import { adminAPI, aiStatusAPI, api } from '../../lib/api';
 import { formatPrice } from '../../lib/utils';
 import Link from 'next/link';
-import { TrendingUp, Users, ShoppingBag, Calendar, Layers, Package, Globe, Sparkles, Rss, ImageIcon, MessageSquare, Settings, BookOpen, Wand2, AlertTriangle, CheckCircle, ArrowRight } from 'lucide-react';
+import { TrendingUp, Users, ShoppingBag, Calendar, Layers, Package, Globe, Sparkles, Rss, ImageIcon, MessageSquare, Settings, BookOpen, Wand2, AlertTriangle, CheckCircle, ArrowRight, Database, RefreshCw } from 'lucide-react';
 
 const QUICK_ACTIONS = [
   { href: '/admin/website-editor', icon: Globe, label: 'Website Editor', desc: 'Edit homepage content', color: 'bg-blue-50 text-blue-600 border-blue-100', badge: 'HOT' },
@@ -24,11 +24,47 @@ export default function AdminDashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [aiStatus, setAiStatus] = useState<any>(null);
+  const [aiChecking, setAiChecking] = useState(true);
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     adminAPI.getDashboard().then(r => setData(r.data.data)).catch(console.error).finally(() => setLoading(false));
-    aiStatusAPI.check().then(r => setAiStatus(r.data)).catch(() => setAiStatus({ available: false, message: 'Could not connect to AI API' }));
+    
+    // Handle BOTH old backend format {providers, mode} AND new format {available, message, model}
+    aiStatusAPI.check()
+      .then(r => {
+        const d = r.data;
+        // New format: has 'available' field directly
+        if (typeof d.available === 'boolean') {
+          setAiStatus(d);
+        }
+        // Old format: has 'providers' and 'mode' — convert to new format
+        else if (d.providers || d.mode) {
+          setAiStatus({
+            available: d.mode === 'live' || !!(d.providers?.gemini?.configured || d.providers?.anthropic?.configured),
+            model: d.providers?.anthropic?.configured ? 'Anthropic Claude' : (d.providers?.gemini?.configured ? 'Gemini' : null),
+            message: d.mode === 'live' ? 'AI online' : 'No AI keys configured',
+            providers: d.providers,
+          });
+        } else {
+          setAiStatus({ available: false, message: 'Could not determine AI status' });
+        }
+      })
+      .catch(() => setAiStatus({ available: false, message: 'Cannot reach backend. Check Render service is running.' }))
+      .finally(() => setAiChecking(false));
   }, []);
+
+  const seedProducts = async () => {
+    setSeeding(true);
+    try {
+      const r = await adminAPI.seedProducts();
+      const { toast } = await import('react-hot-toast');
+      toast.success(r.data.message || 'Products seeded!');
+    } catch(e:any) {
+      const { toast } = await import('react-hot-toast');
+      toast.error(e?.response?.data?.message || 'Seed failed');
+    } finally { setSeeding(false); }
+  };
 
   const s = data?.stats;
 
@@ -43,7 +79,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-gray-800">Dashboard</h1>
@@ -53,12 +88,23 @@ export default function AdminDashboard() {
       </div>
 
       {/* AI Status Banner */}
-      {aiStatus && (
+      {!aiChecking && aiStatus && (
         <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-sm ${aiStatus.available ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
           {aiStatus.available
-            ? <><CheckCircle size={16} className="flex-shrink-0 text-green-600"/><span><strong>AI Vastu Guide is online</strong> — {aiStatus.model || 'Claude AI'} ready</span></>
-            : <><AlertTriangle size={16} className="flex-shrink-0 text-red-500"/><span><strong>AI Guide is offline</strong> — {aiStatus.message || 'Check ANTHROPIC_API_KEY in Render environment variables'}</span><Link href="/admin/ai-settings" className="ml-auto text-xs font-semibold underline flex-shrink-0">Fix →</Link></>
+            ? <><CheckCircle size={16} className="flex-shrink-0 text-green-600"/><span><strong>AI Vastu Guide is online</strong> — {aiStatus.model || 'AI'} ready for analysis</span></>
+            : <><AlertTriangle size={16} className="flex-shrink-0 text-red-500 flex-shrink-0"/><span className="flex-1"><strong>AI Guide is offline</strong> — {aiStatus.message}</span><Link href="/admin/ai-settings" className="text-xs font-semibold underline flex-shrink-0">Fix →</Link></>
           }
+        </div>
+      )}
+
+      {/* Product count alert */}
+      {!loading && s?.totalProducts > 0 && s?.totalProducts < 50 && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border bg-amber-50 border-amber-200 text-amber-800 text-sm">
+          <AlertTriangle size={16} className="flex-shrink-0"/>
+          <span className="flex-1"><strong>Only {s.totalProducts} products</strong> in database. Expected 118. Use Seed button to restore.</span>
+          <button onClick={seedProducts} disabled={seeding} className="text-xs font-semibold bg-amber-600 text-white px-3 py-1.5 rounded-lg flex-shrink-0 hover:bg-amber-700 disabled:opacity-60">
+            {seeding ? 'Seeding…' : 'Seed Products'}
+          </button>
         </div>
       )}
 
@@ -71,7 +117,7 @@ export default function AdminDashboard() {
             const Icon = stat.icon;
             return (
               <Link key={i} href={stat.href} className={`bg-white rounded-2xl border border-gray-100 border-l-4 ${stat.color} p-4 hover:shadow-md transition-all group`}>
-                <div className="flex items-start justify-between mb-2"><p className="text-xs text-gray-400 uppercase tracking-wide leading-tight">{stat.label}</p><Icon size={14} className="text-gray-300 group-hover:text-gray-400 transition-colors mt-0.5"/></div>
+                <div className="flex items-start justify-between mb-2"><p className="text-xs text-gray-400 uppercase tracking-wide leading-tight">{stat.label}</p><Icon size={14} className="text-gray-300 group-hover:text-gray-400 mt-0.5"/></div>
                 <p className="font-display font-bold text-2xl text-gray-800">{stat.value}</p>
               </Link>
             );
@@ -79,17 +125,18 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Quick Actions Grid */}
+      {/* Quick Actions */}
       <div>
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Quick Actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {QUICK_ACTIONS.map((action, i) => {
             const Icon = action.icon;
+            const borderClass = action.color.split(' ').find((c: string) => c.startsWith('border-')) || 'border-gray-100';
             return (
-              <Link key={i} href={action.href} className={`relative flex items-center gap-3 p-3.5 bg-white rounded-2xl border hover:shadow-md transition-all group ${action.color.split(' ').find((c: string) => c.startsWith('border-')) || 'border-gray-100'}`}>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${action.color}`}><Icon size={18}/></div>
+              <Link key={i} href={action.href} className={`relative flex items-center gap-3 p-3.5 bg-white rounded-2xl border hover:shadow-md transition-all group ${borderClass}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${action.color.split(' ').slice(0,2).join(' ')}`}><Icon size={18}/></div>
                 <div className="min-w-0"><p className="font-semibold text-gray-800 text-sm leading-tight">{action.label}</p><p className="text-xs text-gray-400 mt-0.5 truncate">{action.desc}</p></div>
-                {action.badge && <span className="absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: 'rgba(255,107,0,0.15)', color: '#FF6B00', fontSize: '9px' }}>{action.badge}</span>}
+                {action.badge && <span className="absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background:'rgba(255,107,0,0.15)',color:'#FF6B00',fontSize:'9px' }}>{action.badge}</span>}
               </Link>
             );
           })}
@@ -100,7 +147,7 @@ export default function AdminDashboard() {
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl border border-orange-100 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4"><h2 className="font-semibold text-gray-800">Recent Bookings</h2><Link href="/admin/bookings" className="text-primary text-xs hover:underline font-medium">View All →</Link></div>
-          {data?.recentBookings?.length > 0 ? data.recentBookings.slice(0, 5).map((b: any) => (
+          {data?.recentBookings?.length > 0 ? data.recentBookings.slice(0, 5).map((b:any) => (
             <div key={b._id} className="flex justify-between items-center py-2.5 border-b border-gray-50 last:border-0">
               <div><p className="text-sm font-medium text-gray-800">{b.name}</p><p className="text-xs text-gray-400">{b.serviceName}</p></div>
               <span className="font-semibold text-primary text-sm">{formatPrice(b.amount)}</span>
@@ -109,7 +156,7 @@ export default function AdminDashboard() {
         </div>
         <div className="bg-white rounded-2xl border border-orange-100 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4"><h2 className="font-semibold text-gray-800">Recent Orders</h2><Link href="/admin/orders" className="text-primary text-xs hover:underline font-medium">View All →</Link></div>
-          {data?.recentOrders?.length > 0 ? data.recentOrders.slice(0, 5).map((o: any) => (
+          {data?.recentOrders?.length > 0 ? data.recentOrders.slice(0, 5).map((o:any) => (
             <div key={o._id} className="flex justify-between items-center py-2.5 border-b border-gray-50 last:border-0">
               <div><p className="text-sm font-medium text-gray-800">{o.customerInfo?.name}</p><p className="text-xs text-gray-400 capitalize">{o.status}</p></div>
               <span className="font-semibold text-primary text-sm">{formatPrice(o.totalAmount)}</span>
@@ -118,16 +165,17 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* AI Fix Guide - shown when AI is offline */}
-      {aiStatus && !aiStatus.available && (
+      {/* AI Fix Guide */}
+      {!aiChecking && aiStatus && !aiStatus.available && (
         <div className="bg-white rounded-2xl border border-orange-100 p-6 shadow-sm">
-          <h2 className="font-semibold text-gray-800 mb-3 flex items-center gap-2"><AlertTriangle size={16} className="text-orange-500"/>Fix AI Vastu Guide</h2>
+          <h2 className="font-semibold text-gray-800 mb-3 flex items-center gap-2"><AlertTriangle size={16} className="text-orange-500"/>How to Fix AI Vastu Guide</h2>
           <ol className="space-y-2 text-sm text-gray-600 list-decimal list-inside">
-            <li>Go to <strong>Render Dashboard</strong> → your backend service → <strong>Environment</strong></li>
-            <li>Add: <code className="bg-gray-100 px-2 py-0.5 rounded font-mono text-xs">ANTHROPIC_API_KEY</code> = your key from console.anthropic.com</li>
-            <li>Also check: <code className="bg-gray-100 px-2 py-0.5 rounded font-mono text-xs">GEMINI_API_KEY</code> if using Gemini</li>
-            <li>Click <strong>Save Changes</strong> → Render will auto-restart the service</li>
-            <li>Wait 2-3 minutes, then refresh this dashboard</li>
+            <li>Go to <strong>Render Dashboard</strong> → select <strong>vastu-arya-backend-1</strong> service</li>
+            <li>Click <strong>Environment</strong> in the left sidebar</li>
+            <li>Verify <code className="bg-gray-100 px-2 py-0.5 rounded font-mono text-xs">ANTHROPIC_API_KEY</code> is set and starts with <code className="bg-gray-100 px-1 rounded font-mono text-xs">sk-ant-api</code></li>
+            <li>Also add: <code className="bg-gray-100 px-2 py-0.5 rounded font-mono text-xs">GEMINI_API_KEY</code> from Google AI Studio (free)</li>
+            <li>Click <strong>Save Changes</strong> → wait 2-3 minutes for Render to restart</li>
+            <li>Then deploy the <strong>backend-fixes.zip</strong> (fixes the status endpoint format)</li>
           </ol>
         </div>
       )}

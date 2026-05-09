@@ -1,162 +1,46 @@
-// app/(public)/search/page.tsx — Fix #2: The /search route was 404ing. Navbar posts to this.
 'use client';
-
-export const dynamic = 'force-dynamic';
-
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import Navbar from '../../../components/layout/Navbar';
 import Footer from '../../../components/layout/Footer';
 import WhatsAppButton from '../../../components/common/WhatsAppButton';
+import ProductCard from '../../../components/store/ProductCard';
+import { useTranslation } from '../../../lib/i18n';
 import { searchAPI } from '../../../lib/api';
+import Link from 'next/link';
+import { Search } from 'lucide-react';
 
-interface SearchResultItem {
-  _id: string;
-  slug: string;
-  title?: { en: string; hi?: string };
-  name?: { en: string; hi?: string };
-  icon?: string;
-  offerPrice?: number;
-}
-
-interface SearchResults {
-  services: SearchResultItem[];
-  products: SearchResultItem[];
-  blogs: SearchResultItem[];
-}
-
-function SearchResultsView() {
+function SearchContent() {
   const params = useSearchParams();
   const q = params.get('q') || '';
-  const [results, setResults] = useState<SearchResults | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
+  const [results, setResults] = useState<any>({ blogs:[], services:[], products:[], posts:[] });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!q.trim()) { setLoading(false); return; }
+    if (!q) return;
     setLoading(true);
-    setError(null);
-    searchAPI
-      .search(q, 12)
-      .then((r: any) => setResults(r.data.data))
-      .catch((err: Error) => {
-        console.error('[search] failed:', err);
-        setError('Search is temporarily unavailable. Please try again shortly.');
-        setResults(null);
-      })
-      .finally(() => setLoading(false));
+    searchAPI.search(q, 20).then(r => setResults(r.data.data || {})).finally(() => setLoading(false));
   }, [q]);
 
-  const empty =
-    results &&
-    (!results.services || results.services.length === 0) &&
-    (!results.products || results.products.length === 0) &&
-    (!results.blogs || results.blogs.length === 0);
+  const total = results.blogs.length + results.services.length + results.products.length;
 
   return (
     <main className="min-h-screen bg-cream py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        <h1 className="font-display text-3xl font-bold text-text-dark mb-2">
-          Search results for &ldquo;{q}&rdquo;
-        </h1>
-        <p className="text-text-light mb-8">
-          {loading ? 'Searching…' : results ? 'Showing matching services, products and articles.' : ''}
-        </p>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        <div className="mb-8">
+          <h1 className="font-display text-3xl font-bold text-text-dark mb-2">{t('search.title')}</h1>
+          {q && <p className="text-text-light">{total} results for "<strong>{q}</strong>"</p>}
+        </div>
 
-        {loading && (
-          <div className="grid gap-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-20 skeleton rounded-2xl" />
-            ))}
-          </div>
-        )}
+        {loading ? <div className="text-center py-20"><div className="text-4xl animate-spin mb-3">🕉️</div></div> : (
+          <div className="space-y-10">
+            {!q && (<div className="text-center py-20 text-gray-400"><Search size={48} className="mx-auto mb-4 opacity-30"/><p className="text-lg">{t('search.enterKeyword')}</p></div>)}
+            {q && total === 0 && !loading && (<div className="text-center py-20 text-gray-400"><Search size={48} className="mx-auto mb-4 opacity-30"/><p className="text-lg">{t('search.noResults')} "{q}"</p><p className="text-sm mt-2">{t('search.tryDifferent')}</p></div>)}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 mb-6">
-            {error}
-          </div>
-        )}
-
-        {!loading && empty && (
-          <p className="text-text-light mt-8">
-            No results found for &ldquo;{q}&rdquo;. Try a different keyword, or{' '}
-            <Link href="/services" className="text-primary underline">browse services</Link> or{' '}
-            <Link href="/vastu-store" className="text-primary underline">visit the store</Link>.
-          </p>
-        )}
-
-        {results && !empty && (
-          <div className="space-y-8">
-            {results.services && results.services.length > 0 && (
-              <section aria-labelledby="search-services-heading">
-                <h2 id="search-services-heading" className="font-semibold text-lg mb-3 text-text-dark">
-                  Services
-                </h2>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {results.services.map((s) => (
-                    <Link
-                      key={s._id}
-                      href={`/services/${s.slug}`}
-                      className="p-4 bg-white rounded-2xl border border-orange-100 hover:shadow-orange transition-all"
-                    >
-                      {s.icon && <span className="text-2xl" aria-hidden="true">{s.icon}</span>}
-                      <p className="font-semibold text-text-dark mt-2">
-                        {s.title?.en || 'Service'}
-                      </p>
-                      {s.offerPrice !== undefined && (
-                        <p className="text-primary font-bold">₹{s.offerPrice}</p>
-                      )}
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {results.products && results.products.length > 0 && (
-              <section aria-labelledby="search-products-heading">
-                <h2 id="search-products-heading" className="font-semibold text-lg mb-3 text-text-dark">
-                  Products
-                </h2>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {results.products.map((p) => (
-                    <Link
-                      key={p._id}
-                      href={`/vastu-store/product/${p.slug}`}
-                      className="p-4 bg-white rounded-2xl border border-orange-100 hover:shadow-orange transition-all"
-                    >
-                      <p className="font-semibold text-text-dark">
-                        {p.name?.en || 'Product'}
-                      </p>
-                      {p.offerPrice !== undefined && (
-                        <p className="text-primary font-bold">₹{p.offerPrice}</p>
-                      )}
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {results.blogs && results.blogs.length > 0 && (
-              <section aria-labelledby="search-blogs-heading">
-                <h2 id="search-blogs-heading" className="font-semibold text-lg mb-3 text-text-dark">
-                  Blog posts
-                </h2>
-                <div className="space-y-3">
-                  {results.blogs.map((b) => (
-                    <Link
-                      key={b._id}
-                      href={`/blog/${b.slug}`}
-                      className="block p-4 bg-white rounded-2xl border border-orange-100 hover:shadow-orange transition-all"
-                    >
-                      <p className="font-semibold text-text-dark">
-                        {b.title?.en || 'Blog post'}
-                      </p>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
+            {results.services.length > 0 && (<div><h2 className="font-display text-xl font-bold text-text-dark mb-4">{t('search.services')}</h2><div className="grid gap-4">{results.services.map((s:any)=>(<Link key={s._id} href={`/services/${s.slug}`} className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-orange-100 hover:shadow-orange transition-all"><div className="text-3xl">{s.icon}</div><div><h3 className="font-semibold text-text-dark">{s.title.en}</h3><p className="text-sm text-text-light">₹{s.offerPrice}</p></div></Link>))}</div></div>)}
+            {results.products.length > 0 && (<div><h2 className="font-display text-xl font-bold text-text-dark mb-4">{t('search.products')}</h2><div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{results.products.map((p:any)=><ProductCard key={p._id} product={p}/>)}</div></div>)}
+            {results.blogs.length > 0 && (<div><h2 className="font-display text-xl font-bold text-text-dark mb-4">{t('search.blogs')}</h2><div className="grid gap-4">{results.blogs.map((b:any)=>(<Link key={b._id} href={`/blog/${b.slug}`} className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-orange-100 hover:shadow-orange transition-all">{b.coverImage&&<img src={b.coverImage} alt={b.title.en} className="w-14 h-14 rounded-xl object-cover flex-shrink-0"/>}<div><h3 className="font-semibold text-text-dark">{b.title.en}</h3><p className="text-xs text-gray-400">{b.category}</p></div></Link>))}</div></div>)}
           </div>
         )}
       </div>
@@ -168,14 +52,8 @@ export default function SearchPage() {
   return (
     <>
       <Navbar />
-      <Suspense
-        fallback={
-          <div className="min-h-screen bg-cream flex items-center justify-center text-text-light">
-            Searching…
-          </div>
-        }
-      >
-        <SearchResultsView />
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-4xl animate-spin">🕉️</div></div>}>
+        <SearchContent />
       </Suspense>
       <Footer />
       <WhatsAppButton />
