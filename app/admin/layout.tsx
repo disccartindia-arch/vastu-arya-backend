@@ -8,6 +8,7 @@ import { LayoutDashboard, Package, ShoppingBag, Calendar, BookOpen, Users, Setti
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/website-editor', label: 'Website Editor', icon: Globe, badge: 'NEW' },
+  { href: '/admin/about', label: 'About Page', icon: Users, badge: 'NEW' },
   { href: '/admin/ai-settings', label: 'AI Vastu Settings', icon: Sparkles, badge: 'NEW' },
   { href: '/admin/services', label: 'Services', icon: Layers },
   { href: '/admin/products', label: 'Products', icon: Package },

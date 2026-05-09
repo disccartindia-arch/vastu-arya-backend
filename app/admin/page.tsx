@@ -7,8 +7,9 @@ import { TrendingUp, Users, ShoppingBag, Calendar, Layers, Package, Globe, Spark
 
 const QUICK_ACTIONS = [
   { href: '/admin/website-editor', icon: Globe, label: 'Website Editor', desc: 'Edit homepage content', color: 'bg-blue-50 text-blue-600 border-blue-100', badge: 'HOT' },
-  { href: '/admin/services', icon: Layers, label: 'Services', desc: 'Manage consultations', color: 'bg-orange-50 text-primary border-orange-100' },
-  { href: '/admin/products', icon: Package, label: 'Products', desc: 'Manage store items', color: 'bg-amber-50 text-amber-600 border-amber-100' },
+  { href: '/admin/about', icon: Users, label: 'About Page', desc: 'Edit doctor profile & bio', color: 'bg-orange-50 text-primary border-orange-100', badge: 'NEW' },
+  { href: '/admin/services', icon: Layers, label: 'Services', desc: 'Manage consultations', color: 'bg-amber-50 text-amber-600 border-amber-100' },
+  { href: '/admin/products', icon: Package, label: 'Products', desc: 'Manage store items', color: 'bg-yellow-50 text-yellow-600 border-yellow-100' },
   { href: '/admin/blogs', icon: BookOpen, label: 'Blogs', desc: 'Write & publish posts', color: 'bg-green-50 text-green-600 border-green-100' },
   { href: '/admin/bookings', icon: Calendar, label: 'Bookings', desc: 'View appointments', color: 'bg-purple-50 text-purple-600 border-purple-100' },
   { href: '/admin/orders', icon: ShoppingBag, label: 'Orders', desc: 'Track store orders', color: 'bg-pink-50 text-pink-600 border-pink-100' },
