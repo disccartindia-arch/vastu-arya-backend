@@ -13,10 +13,14 @@ interface UIStore {
 }
 
 export const useUIStore = create<UIStore>((set) => ({
+  // Always start with 'en' on server — avoids hydration mismatch.
+  // Lang is restored from localStorage in a useEffect in providers.
   lang: 'en',
   setLang: (lang) => {
     set({ lang });
-    if (typeof window !== 'undefined') localStorage.setItem('vastu_lang', lang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('vastu_lang', lang);
+    }
   },
   showAppointmentPopup: false,
   setShowAppointmentPopup: (show) => set({ showAppointmentPopup: show }),
