@@ -31,8 +31,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedLang = localStorage.getItem('vastu_lang');
-    if (savedLang) useUIStore.getState().setLang(savedLang as any);
     Promise.all([
       servicesAPI.getAll({ showOnHome: true, isActive: true }),
       productsAPI.getAll({ isFeatured: true, limit: 8 }),

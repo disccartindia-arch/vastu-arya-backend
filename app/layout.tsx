@@ -1,9 +1,17 @@
-// app/layout.tsx — Fix #5: GSC verification token made env-driven
+// app/layout.tsx
 import type { Metadata, Viewport } from 'next';
+import dynamic from 'next/dynamic';
 import './globals.css';
-import { Toaster }         from 'react-hot-toast';
-import LuxuryBackground    from '../components/ui/LuxuryBackground';
+import { Toaster } from 'react-hot-toast';
 import { vastuAryaJsonLd } from '@/lib/seo';
+import Providers from '../components/Providers';
+
+// FIX: ssr:false — LuxuryBackground uses Math.random() + canvas which causes
+// hydration mismatch (server HTML ≠ client render). Skip SSR entirely.
+const LuxuryBackground = dynamic(
+  () => import('../components/ui/LuxuryBackground'),
+  { ssr: false }
+);
 
 export const viewport: Viewport = {
   width: 'device-width', initialScale: 1, themeColor: '#FF6B00',
@@ -37,7 +45,6 @@ export const metadata: Metadata = {
   },
   robots:       { index: true, follow: true, googleBot: { index: true, follow: true } },
   icons:        { icon: '/logo.jpg', apple: '/logo.jpg' },
-  // Fix #5 — env-driven GSC token. Add NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION to Vercel env vars.
   verification: {
     google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
   },
@@ -45,7 +52,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: handles any remaining client/server differences
+    // e.g. lang switcher, user state, timestamps
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -54,9 +63,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{ __html: JSON.stringify(vastuAryaJsonLd) }}
         />
       </head>
-      <body className="font-body bg-cream">
+      <body className="font-body bg-cream" suppressHydrationWarning>
         <LuxuryBackground />
-        <div className="relative z-10">{children}</div>
+        <Providers>
+          <div className="relative z-10">{children}</div>
+        </Providers>
         <Toaster
           position="top-right"
           toastOptions={{
