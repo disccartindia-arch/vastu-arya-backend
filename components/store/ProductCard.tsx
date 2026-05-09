@@ -1,3 +1,4 @@
+// components/store/ProductCard.tsx — Fix #10: lazy load, aria-hidden on decorative emoji
 'use client';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
@@ -20,9 +21,23 @@ export default function ProductCard({ product }: Props) {
       <Link href={`/vastu-store/product/${product.slug}`}>
         <div className="relative aspect-square bg-cream overflow-hidden">
           {product.images[0] ? (
-            <img src={product.images[0]} alt={name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+            <img
+              src={product.images[0]}
+              alt={name}
+              loading="lazy"
+              decoding="async"
+              width={400}
+              height={400}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-5xl">🕉️</div>
+            // Fix #10 — aria-hidden on decorative fallback emoji
+            <div
+              className="w-full h-full flex items-center justify-center text-5xl"
+              aria-hidden="true"
+            >
+              🕉️
+            </div>
           )}
           {discount > 0 && (
             <div className="absolute top-2 left-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-lg">{discount}% OFF</div>
@@ -49,9 +64,15 @@ export default function ProductCard({ product }: Props) {
           <span className="font-bold text-primary text-lg">{formatPrice(product.offerPrice)}</span>
           {product.price > product.offerPrice && <span className="text-xs text-gray-400 line-through">{formatPrice(product.price)}</span>}
         </div>
-        <button onClick={() => product.stock > 0 && addItem(product)} disabled={product.stock === 0} className="w-full flex items-center justify-center gap-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+        <button
+          onClick={() => product.stock > 0 && addItem(product)}
+          disabled={product.stock === 0}
+          className="w-full flex items-center justify-center gap-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <ShoppingCart size={14} />
-          {product.stock > 0 ? (lang === 'en' ? 'Add to Cart' : 'कार्ट में जोड़ें') : (lang === 'en' ? 'Out of Stock' : 'स्टॉक नहीं')}
+          {product.stock > 0
+            ? (lang === 'en' ? 'Add to Cart' : 'कार्ट में जोड़ें')
+            : (lang === 'en' ? 'Out of Stock' : 'स्टॉक नहीं')}
         </button>
       </div>
     </motion.div>

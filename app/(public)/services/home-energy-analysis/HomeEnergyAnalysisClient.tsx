@@ -1,31 +1,14 @@
 'use client';
 import ServicePageTemplate from '../../../../components/services/ServicePageTemplate';
 export default function Page() {
-  const process = [
-    { step: '1', title: 'Book & Share Details', desc: 'Book your session and share floor plan photos and current challenges.' },
-    { step: '2', title: 'Deep Vastu Analysis',  desc: 'Dr. PPS Tomar analyses every zone and energy flow in your home.' },
-    { step: '3', title: 'Video Consultation',   desc: '60-minute video/phone call explaining findings and remedies.' },
-    { step: '4', title: 'Written Report',        desc: 'Receive a detailed written report with prioritised remedies within 48 hours.' },
-  ];
-  const faqs = [
-    { q: 'Do I need demolition?',                  a: 'No. Dr. PPS Tomar specialises in non-demolition remedies using Vastu products, colours and rearrangements.' },
-    { q: 'Can I do this for a rented home?',        a: 'Yes. Vastu analysis and most remedies work equally well in rented homes.' },
-    { q: 'What about irregular-shaped plots?',     a: 'Irregular shapes are covered in the analysis with specific remedies provided.' },
-    { q: 'How soon will I see results?',            a: 'Most families notice positive changes within 21-40 days of implementing remedies.' },
-  ];
-  return (
-    <ServicePageTemplate
-      icon="🏠"
-      badge="Most Popular"
-      title="Home Energy Vastu Analysis"
-      duration="60 minutes"
-      subtitle="Comprehensive energy audit of your home using advanced Vastu Shastra principles by Dr. PPS Tomar"
-      originalPrice={3999}
-      price={2499}
-      description="A complete Vastu energy analysis of your entire home by IVAF certified Dr. Pranveer Pratap Singh Tomar. This service includes analysis of all eight directions, entry points, room placements, colour energy, element balance, and non-demolition remedies. Receive a detailed written report with actionable remedies you can implement yourself."
-      benefits={['Complete 8-direction energy analysis','Room-by-room Vastu audit','No demolition remedies only','Written report included','Bedroom kitchen toilet analysis','Entry door main gate Vastu','Colour and element recommendations','30-day follow-up support']}
-      process={process}
-      faqs={faqs}
-    />
-  );
+  return (<ServicePageTemplate
+    icon="🏠" badge="Expert Service"
+    title="Home Energy Analysis"
+    subtitle="Expert consultation by IVAF Certified Dr. PPS Tomar"
+    description="Get expert guidance from Dr. PPS Tomar - IVAF Certified Vastu and astrology expert with 15+ years of experience and 45,000+ clients transformed across India."
+    price={2499} originalPrice={3999} duration="45 minutes"
+    benefits={['Expert analysis by IVAF Certified Dr. PPS Tomar','Detailed written report','Personalized remedies and guidance','30-day follow-up support','No demolition remedies','100% authentic Vedic principles']}
+    process={[{step:'1',title:'Book & Share Details',desc:'Book your session and share relevant information.'},{step:'2',title:'Expert Analysis',desc:'Dr. PPS Tomar analyses your details carefully.'},{step:'3',title:'Consultation Call',desc:'Personal call with Dr. PPS Tomar to discuss findings.'},{step:'4',title:'Written Report',desc:'Receive detailed report within 48 hours.'}]}
+    faqs={[{q:'How long does the consultation take?',a:'Approximately 45-60 minutes depending on complexity.'},{q:'How will I receive my report?',a:'Via email within 24-48 hours of the consultation.'},{q:'Is this available online?',a:'Yes, consultations are available via video call or phone across India and internationally.'}]}
+  />);
 }

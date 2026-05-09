@@ -3,16 +3,9 @@ import { buildMetadata } from "@/lib/seo";
 import BusinessVastuClient from "./BusinessVastuClient";
 
 export const metadata: Metadata = buildMetadata({
-  title:       "Business Vastu Consultation - Boost Profits and Attract Clients",
-  description: "Expert Business Vastu consultation by Dr. PPS Tomar. Optimise your office, shop or factory for maximum prosperity and customer footfall. IVAF Certified.",
-  path:        "/services/business-vastu",
-
+  title: "Vastu Service - Dr. PPS Tomar | Vastu Arya",
+  description: "Expert Vastu and astrology service by IVAF Certified Dr. PPS Tomar.",
+  path: "/services/business-vastu",
 });
 
-export default function Page() {
-  return (
-    <>
-      <BusinessVastuClient />
-    </>
-  );
-}
+export default function Page() { return <BusinessVastuClient />; }

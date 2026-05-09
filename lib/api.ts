@@ -1,8 +1,27 @@
-import axios from 'axios';
+// lib/api.ts — Fix #7 (prod URL) + Fix #12 (30s timeout + cold-start retry)
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+// Fix #7 — never silently default to localhost in production
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  'https://vastu-arya-backend-1.onrender.com/api';
 
-const api = axios.create({ baseURL: API_URL, timeout: 15000, headers: { 'Content-Type': 'application/json' } });
+if (typeof window !== 'undefined' && !process.env.NEXT_PUBLIC_API_URL) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[Vastu Arya] NEXT_PUBLIC_API_URL is not set. Falling back to: ' + API_URL
+  );
+}
+
+// Fix #12 — 30s timeout (Render free-tier cold-start can take 20-25s)
+const api = axios.create({
+  baseURL: API_URL,
+  timeout: 30_000,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+// Fix #12 — Auto-retry once on 502/503/network errors (Render cold-start)
+type RetryConfig = AxiosRequestConfig & { _retry?: boolean };
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
@@ -14,13 +33,35 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (r) => r,
-  (error) => {
+  async (error: AxiosError) => {
+    const cfg = error.config as RetryConfig | undefined;
+
+    const isColdStart =
+      error.code === 'ECONNABORTED' ||
+      error.code === 'ERR_NETWORK' ||
+      error.response?.status === 503 ||
+      error.response?.status === 502;
+
+    if (isColdStart && cfg && !cfg._retry) {
+      cfg._retry = true;
+      // eslint-disable-next-line no-console
+      console.info('[api] Render cold-start detected, retrying once after 3s…');
+      await new Promise((r) => setTimeout(r, 3000));
+      return api(cfg);
+    }
+
+    // Existing 401 / auth handler
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('vastu_token');
       localStorage.removeItem('vastu_user');
-      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/admin'))
+      if (
+        !window.location.pathname.includes('/login') &&
+        !window.location.pathname.includes('/admin')
+      ) {
         window.location.href = '/login';
+      }
     }
+
     return Promise.reject(error);
   }
 );
@@ -123,8 +164,6 @@ export const reviewsAPI = {
   delete: (id: string) => api.delete(`/reviews/${id}`),
 };
 
-// ─── NEW: Homepage Settings, Testimonials, Theme ─────────────────────────────
-
 export const homepageSettingsAPI = {
   get: () => api.get('/homepage/settings'),
   update: (d: any) => api.put('/homepage/settings', d),
@@ -154,7 +193,6 @@ export const postsAPI = {
   delete: (id: string) => api.delete(`/posts/${id}`),
 };
 
-
 export const searchAPI = {
   search: (q: string, limit = 8) => api.get('/search', { params: { q, limit } }),
   trending: () => api.get('/search/trending'),
@@ -169,8 +207,8 @@ export const aiAPI = {
 };
 
 export const aiSettingsAPI = {
-  get:       () => api.get('/ai-settings'),               // admin only (requires auth)
-  getPublic: () => api.get('/ai-settings/public'),        // public — safe fields only
+  get:       () => api.get('/ai-settings'),
+  getPublic: () => api.get('/ai-settings/public'),
   update: (d: any) => api.put('/ai-settings', d),
   reset:  () => api.post('/ai-settings/reset'),
 };

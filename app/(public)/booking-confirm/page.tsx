@@ -3,12 +3,10 @@ import { buildMetadata } from "@/lib/seo";
 import BookingConfirmClient from "./BookingConfirmClient";
 
 export const metadata: Metadata = buildMetadata({
-  title:       "Booking Confirmed | Vastu Arya",
+  title: "Booking Confirmed | Vastu Arya",
   description: "",
-  path:        "/booking-confirm",
+  path: "/booking-confirm",
   noIndex: true,
 });
 
-export default function Page() {
-  return <BookingConfirmClient />;
-}
+export default function Page() { return <BookingConfirmClient />; }

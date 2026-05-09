@@ -3,12 +3,10 @@ import { buildMetadata } from "@/lib/seo";
 import LoginClient from "./LoginClient";
 
 export const metadata: Metadata = buildMetadata({
-  title:       "Login | Vastu Arya",
+  title: "Login | Vastu Arya",
   description: "",
-  path:        "/login",
+  path: "/login",
   noIndex: true,
 });
 
-export default function Page() {
-  return <LoginClient />;
-}
+export default function Page() { return <LoginClient />; }

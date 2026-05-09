@@ -19,25 +19,8 @@ export default function BlogDetailPage() {
     if (slug) blogsAPI.getBySlug(slug as string).then(r => setBlog(r.data.data)).finally(() => setLoading(false));
   }, [slug]);
 
-  if (loading) return (
-    <>
-      <Navbar />
-      <div className="min-h-screen bg-cream flex items-center justify-center">
-        <div className="text-5xl animate-spin">🕉️</div>
-      </div>
-      <Footer />
-    </>
-  );
-
-  if (!blog) return (
-    <>
-      <Navbar />
-      <div className="min-h-screen bg-cream flex items-center justify-center text-center">
-        <div><div className="text-5xl mb-3">📝</div><p className="text-text-light mb-4">Blog post not found</p><Link href="/blog" className="text-primary hover:underline">← Back to Blog</Link></div>
-      </div>
-      <Footer />
-    </>
-  );
+  if (loading) return (<><Navbar /><div className="min-h-screen bg-cream flex items-center justify-center"><div className="text-5xl animate-spin">🕉️</div></div><Footer /></>);
+  if (!blog) return (<><Navbar /><div className="min-h-screen bg-cream flex items-center justify-center text-center"><div><div className="text-5xl mb-3">📝</div><p className="text-text-light mb-4">Blog post not found</p><Link href="/blog" className="text-primary hover:underline">← Back to Blog</Link></div></div><Footer /></>);
 
   const title = lang === 'hi' && blog.title.hi ? blog.title.hi : blog.title.en;
   const content = lang === 'hi' && blog.content.hi ? blog.content.hi : blog.content.en;
@@ -46,11 +29,7 @@ export default function BlogDetailPage() {
     <>
       <Navbar />
       <main>
-        {blog.coverImage && (
-          <div className="w-full h-64 sm:h-96 overflow-hidden">
-            <img src={blog.coverImage} alt={title} className="w-full h-full object-cover" />
-          </div>
-        )}
+        {blog.coverImage && <div className="w-full h-64 sm:h-96 overflow-hidden"><img src={blog.coverImage} alt={title} className="w-full h-full object-cover" /></div>}
         <section className="py-12 bg-cream">
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
             <Link href="/blog" className="flex items-center gap-2 text-primary text-sm mb-6 hover:underline"><ArrowLeft size={16} /> Back to Blog</Link>

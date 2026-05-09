@@ -1,12 +1,7 @@
 'use client';
 import { formatPrice, calculateDiscount } from '../../lib/utils';
 
-interface PriceDisplayProps {
-  original: number;
-  offer: number;
-  size?: 'sm' | 'md' | 'lg';
-  showBadge?: boolean;
-}
+interface PriceDisplayProps { original: number; offer: number; size?: 'sm' | 'md' | 'lg'; showBadge?: boolean; }
 
 export default function PriceDisplay({ original, offer, size = 'md', showBadge = true }: PriceDisplayProps) {
   const discount = calculateDiscount(original, offer);

@@ -1,3 +1,4 @@
+// components/ui/LuxuryBackground.tsx — Fix #8: Skip on admin + respect prefers-reduced-motion
 'use client';
 import { useEffect, useRef } from 'react';
 
@@ -5,6 +6,19 @@ export default function LuxuryBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    // Fix #8a — Skip animation on admin routes (saves CPU for content editors)
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+      return;
+    }
+
+    // Fix #8b — Respect OS-level "reduce motion" accessibility preference
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -79,7 +93,6 @@ export default function LuxuryBackground() {
         ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha));
 
         if (p.gold) {
-          // Gold particle glow
           const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3);
           grad.addColorStop(0, 'rgba(212,160,23,0.8)');
           grad.addColorStop(0.4, 'rgba(240,192,64,0.4)');
@@ -89,13 +102,11 @@ export default function LuxuryBackground() {
           ctx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
           ctx.fill();
 
-          // Core
           ctx.fillStyle = '#F0C040';
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          // White star
           ctx.fillStyle = 'rgba(255,248,230,0.9)';
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -128,7 +139,17 @@ export default function LuxuryBackground() {
     <canvas
       ref={canvasRef}
       id="luxury-canvas"
-      style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0, opacity: 0.65 }}
+      aria-hidden="true"  // Fix #8 — screen readers skip decorative canvas
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: 0,
+        opacity: 0.65,
+      }}
     />
   );
 }

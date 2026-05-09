@@ -24,10 +24,7 @@ export default function CategoryPage() {
   useEffect(() => {
     if (!category) return;
     setLoading(true);
-    productsAPI.getAll({ category })
-      .then(res => setProducts(res?.data?.data || []))
-      .catch(() => setProducts([]))
-      .finally(() => setLoading(false));
+    productsAPI.getAll({ category }).then(res => setProducts(res?.data?.data || [])).catch(() => setProducts([])).finally(() => setLoading(false));
   }, [category]);
 
   return (

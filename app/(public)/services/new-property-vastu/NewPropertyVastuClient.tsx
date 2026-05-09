@@ -1,31 +1,14 @@
 'use client';
 import ServicePageTemplate from '../../../../components/services/ServicePageTemplate';
 export default function Page() {
-  const process = [
-    { step: '1', title: 'Share Property Details',  desc: 'Send floor plan photos, site location and entrance direction.' },
-    { step: '2', title: 'Detailed Analysis',        desc: 'Dr. PPS Tomar analyses the property for Vastu strengths and defects.' },
-    { step: '3', title: 'Consultation Call',        desc: '45-minute call with clear buy/avoid/remedy recommendation.' },
-    { step: '4', title: 'Written Report',           desc: 'Receive a written Vastu assessment report within 48 hours.' },
-  ];
-  const faqs = [
-    { q: 'Can you analyse a property you have not visited?',     a: 'Yes — floor plans and photographs are sufficient for a comprehensive Vastu assessment.' },
-    { q: 'What if there are Vastu defects in my dream property?',a: 'Many defects can be corrected with non-demolition remedies. Defect severity will be clearly indicated.' },
-    { q: 'Can you compare two or three properties?',             a: 'Yes — property comparison can be included for a small additional fee.' },
-    { q: 'Is this for residential properties only?',             a: 'No — we analyse residential, commercial, industrial and plot properties.' },
-  ];
-  return (
-    <ServicePageTemplate
-      icon="🏗️"
-      badge="Before You Buy"
-      title="New Property Vastu Check"
-      duration="45 minutes"
-      subtitle="Check Vastu before buying or renting any property — avoid costly mistakes with Dr. PPS Tomar"
-      originalPrice={2999}
-      price={1999}
-      description="The property you choose shapes your destiny. Before investing in a new home, plot, flat or commercial space, let Dr. PPS Tomar assess its Vastu. Submit floor plans and photographs. Receive a detailed assessment covering entry, kitchen, master bedroom, toilet placements, plot shape, road-facing direction — with a clear go/no-go recommendation."
-      benefits={['Floor plan and photo analysis','Go/no-go purchase recommendation','Entry bedroom kitchen analysis','Plot shape and road direction Vastu','Toilet and bathroom placement check','Remedy cost estimation if defects found','Multiple property comparison','Report within 48 hours']}
-      process={process}
-      faqs={faqs}
-    />
-  );
+  return (<ServicePageTemplate
+    icon="🏗️" badge="Expert Service"
+    title="New Property Vastu Check"
+    subtitle="Expert consultation by IVAF Certified Dr. PPS Tomar"
+    description="Get expert guidance from Dr. PPS Tomar - IVAF Certified Vastu and astrology expert with 15+ years of experience and 45,000+ clients transformed across India."
+    price={1999} originalPrice={2999} duration="45 minutes"
+    benefits={['Expert analysis by IVAF Certified Dr. PPS Tomar','Detailed written report','Personalized remedies and guidance','30-day follow-up support','No demolition remedies','100% authentic Vedic principles']}
+    process={[{step:'1',title:'Book & Share Details',desc:'Book your session and share relevant information.'},{step:'2',title:'Expert Analysis',desc:'Dr. PPS Tomar analyses your details carefully.'},{step:'3',title:'Consultation Call',desc:'Personal call with Dr. PPS Tomar to discuss findings.'},{step:'4',title:'Written Report',desc:'Receive detailed report within 48 hours.'}]}
+    faqs={[{q:'How long does the consultation take?',a:'Approximately 45-60 minutes depending on complexity.'},{q:'How will I receive my report?',a:'Via email within 24-48 hours of the consultation.'},{q:'Is this available online?',a:'Yes, consultations are available via video call or phone across India and internationally.'}]}
+  />);
 }

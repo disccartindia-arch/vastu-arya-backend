@@ -3,12 +3,10 @@ import { buildMetadata } from "@/lib/seo";
 import PaymentSuccessClient from "./PaymentSuccessClient";
 
 export const metadata: Metadata = buildMetadata({
-  title:       "Payment Success | Vastu Arya",
+  title: "Payment Success | Vastu Arya",
   description: "",
-  path:        "/payment-success",
+  path: "/payment-success",
   noIndex: true,
 });
 
-export default function Page() {
-  return <PaymentSuccessClient />;
-}
+export default function Page() { return <PaymentSuccessClient />; }

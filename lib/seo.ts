@@ -1,3 +1,4 @@
+// lib/seo.ts — Fix #5: GSC verification token made env-driven
 import type { Metadata } from 'next';
 
 const SITE_URL  = 'https://www.vastuarya.com';
@@ -52,7 +53,10 @@ export function buildMetadata({
     robots: noIndex
       ? { index: false, follow: false }
       : { index: true, follow: true, googleBot: { index: true, follow: true } },
-    verification: { google: 'XXXXXX' },
+    // Fix #5 — env-driven GSC token; add NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION in Vercel env vars
+    verification: {
+      google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
+    },
   };
 }
 
@@ -129,7 +133,7 @@ export const vastuAryaJsonLd = {
       publisher:   { '@id': SITE_URL + '/#business' },
       potentialAction: {
         '@type':  'SearchAction',
-        target:   { '@type': 'EntryPoint', urlTemplate: SITE_URL + '/blog?q={search_term_string}' },
+        target:   { '@type': 'EntryPoint', urlTemplate: SITE_URL + '/search?q={search_term_string}' },
         'query-input': 'required name=search_term_string',
       },
     },
@@ -141,7 +145,7 @@ export const bookAppointmentJsonLd = {
   '@type':      'Service',
   name:         'Book Vastu Consultation with Dr. PPS Tomar',
   description:  'Book a Vastu Shastra, Astrology, or Numerology consultation with IVAF Certified Expert Dr. PPS Tomar. Starting from Rs.11.',
-  url:          SITE_URL + '/services/book-appointment',
+  url:          SITE_URL + '/book-appointment',
   provider:     { '@id': SITE_URL + '/#business' },
   areaServed:   { '@type': 'Country', name: 'India' },
   offers: {
@@ -149,6 +153,6 @@ export const bookAppointmentJsonLd = {
     price:          '11',
     priceCurrency:  'INR',
     availability:   'https://schema.org/InStock',
-    url:            SITE_URL + '/services/book-appointment',
+    url:            SITE_URL + '/book-appointment',
   },
 };

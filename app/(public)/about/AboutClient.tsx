@@ -7,65 +7,12 @@ import WhatsAppButton from '../../../components/common/WhatsAppButton';
 import { useUIStore } from '../../../store/uiStore';
 import { motion } from 'framer-motion';
 import { Award, Star, Users, BookOpen } from 'lucide-react';
-
 export default function AboutPage() {
   const { lang, setShowAppointmentPopup } = useUIStore();
-  return (
-    <>
-      <Navbar />
-      <main>
-        <section className="bg-dark-gradient py-20 text-center relative overflow-hidden">
-          <div className="absolute inset-0 mandala-bg opacity-10"/>
-          <div className="relative max-w-3xl mx-auto px-4">
-            <div className="text-6xl mb-4">🕉️</div>
-            <h1 className="font-display text-4xl sm:text-5xl font-bold text-white mb-4">{lang==='en'?'About Vastu Arya':'वास्तु आर्या के बारे में'}</h1>
-            <p className="text-gray-300 text-lg">{lang==='en'?"India's Premier Vastu & Astrology Platform":'भारत का प्रमुख वास्तु और ज्योतिष प्लेटफॉर्म'}</p>
-          </div>
-        </section>
-
-        <section className="py-20 bg-cream">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div>
-                <span className="font-accent text-primary text-sm tracking-widest uppercase">Meet the Expert</span>
-                <h2 className="font-display text-3xl font-bold text-text-dark mt-2 mb-4">Dr. PPS Tomar — IVAF Certified Master</h2>
-                <p className="text-text-mid leading-relaxed mb-4">Dr. PPS Tomar is one of India's most respected Vastu Shastra experts, holding a prestigious Doctorate degree in Vastu Vadana. Awarded by the International Vedic Astrology Federation (IVAF LLC, USA) and recognized in New Delhi, Dr. PPS Tomar has transformed over 45,000 lives through authentic Vastu and Astrology guidance.</p>
-                <p className="text-text-mid leading-relaxed mb-6">With 15+ years of experience spanning residential Vastu, commercial properties, factory layouts, numerology, gemology, and astrology — Dr. PPS Tomar brings a scientific, evidence-based approach to ancient Vedic wisdom.</p>
-                <div className="grid grid-cols-2 gap-4">
-                  {[{n:'45,000+',l:'Happy Clients'},{n:'15+',l:'Years Experience'},{n:'100+',l:'Services Offered'},{n:'50+',l:'Cities Covered'}].map((s,i)=>(
-                    <div key={i} className="bg-white rounded-2xl p-4 text-center border border-orange-100">
-                      <div className="font-display font-bold text-2xl text-primary">{s.n}</div>
-                      <div className="text-text-light text-xs mt-1">{s.l}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-4">
-                {[
-                  {icon:Award, title:'IVAF Certified', desc:'International Vedic Astrology Federation LLC, USA — Global Recognition'},
-                  {icon:BookOpen, title:'Vastu Vadana Doctorate', desc:'Doctor\'s degree in Vastu Shastra from a prestigious institute'},
-                  {icon:Star, title:'New Delhi Recognition', desc:'Awarded and recognized by Government bodies in New Delhi'},
-                  {icon:Users, title:'45,000+ Transformations', desc:'Over a decade of successfully transforming homes and lives'},
-                ].map((c,i)=>(
-                  <motion.div key={i} initial={{opacity:0,x:30}} whileInView={{opacity:1,x:0}} viewport={{once:true}} transition={{delay:i*0.1}} className="flex items-start gap-4 bg-white p-4 rounded-2xl border border-orange-100">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0"><c.icon size={20} className="text-primary"/></div>
-                    <div><h3 className="font-semibold text-text-dark">{c.title}</h3><p className="text-text-light text-sm">{c.desc}</p></div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="py-16 bg-saffron-gradient text-center">
-          <h2 className="font-display text-3xl font-bold text-white mb-4">Ready to Transform Your Life?</h2>
-          <button onClick={() => setShowAppointmentPopup(true)} className="bg-white text-primary hover:bg-cream px-10 py-4 rounded-2xl font-bold text-lg transition-all shadow-lg">📅 Book Appointment @ ₹11</button>
-        </section>
-      </main>
-      <Footer />
-      <AppointmentPopup />
-      <CartDrawer />
-      <WhatsAppButton />
-    </>
-  );
+  return (<><Navbar /><main>
+    <section className="bg-dark-gradient py-20 text-center relative overflow-hidden"><div className="absolute inset-0 mandala-bg opacity-10"/><div className="relative max-w-3xl mx-auto px-4"><div className="text-6xl mb-4">🕉️</div><h1 className="font-display text-4xl sm:text-5xl font-bold text-white mb-4">{lang==='en'?'About Vastu Arya':'वास्तु आर्या के बारे में'}</h1><p className="text-gray-300 text-lg">{lang==='en'?"India's Premier Vastu & Astrology Platform":'भारत का प्रमुख वास्तु और ज्योतिष प्लेटफॉर्म'}</p></div></section>
+    <section className="py-20 bg-cream"><div className="max-w-5xl mx-auto px-4 sm:px-6"><div className="grid lg:grid-cols-2 gap-12 items-center"><div><span className="font-accent text-primary text-sm tracking-widest uppercase">Meet the Expert</span><h2 className="font-display text-3xl font-bold text-text-dark mt-2 mb-4">Dr. PPS Tomar — IVAF Certified Master</h2><p className="text-text-mid leading-relaxed mb-4">Dr. PPS Tomar is one of India's most respected Vastu Shastra experts, holding a prestigious Doctorate degree in Vastu Vadana. Awarded by the International Vedic Astrology Federation (IVAF LLC, USA) and recognized in New Delhi, Dr. PPS Tomar has transformed over 45,000 lives.</p><div className="grid grid-cols-2 gap-4">{[{n:'45,000+',l:'Happy Clients'},{n:'15+',l:'Years Experience'},{n:'100+',l:'Services Offered'},{n:'50+',l:'Cities Covered'}].map((s,i)=>(<div key={i} className="bg-white rounded-2xl p-4 text-center border border-orange-100"><div className="font-display font-bold text-2xl text-primary">{s.n}</div><div className="text-text-light text-xs mt-1">{s.l}</div></div>))}</div></div>
+    <div className="space-y-4">{[{icon:Award,title:'IVAF Certified',desc:'International Vedic Astrology Federation LLC, USA'},{icon:BookOpen,title:'Vastu Vadana Doctorate',desc:"Doctor's degree in Vastu Shastra"},{icon:Star,title:'New Delhi Recognition',desc:'Awarded and recognized by Government bodies'},{icon:Users,title:'45,000+ Transformations',desc:'Over a decade of successfully transforming homes and lives'}].map((c,i)=>(<motion.div key={i} initial={{opacity:0,x:30}} whileInView={{opacity:1,x:0}} viewport={{once:true}} transition={{delay:i*0.1}} className="flex items-start gap-4 bg-white p-4 rounded-2xl border border-orange-100"><div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0"><c.icon size={20} className="text-primary"/></div><div><h3 className="font-semibold text-text-dark">{c.title}</h3><p className="text-text-light text-sm">{c.desc}</p></div></motion.div>))}</div></div></div></section>
+    <section className="py-16 bg-saffron-gradient text-center"><h2 className="font-display text-3xl font-bold text-white mb-4">Ready to Transform Your Life?</h2><button onClick={() => setShowAppointmentPopup(true)} className="bg-white text-primary hover:bg-cream px-10 py-4 rounded-2xl font-bold text-lg transition-all shadow-lg">📅 Book Appointment @ ₹11</button></section>
+  </main><Footer /><AppointmentPopup /><CartDrawer /><WhatsAppButton /></>);
 }

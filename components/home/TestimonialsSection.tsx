@@ -1,3 +1,4 @@
+// components/home/TestimonialsSection.tsx — Fix #10: proper alt text + lazy loading on avatars
 'use client';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -5,7 +6,6 @@ import { Star } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { testimonialsAPI, contentAPI } from '../../lib/api';
 
-// Hardcoded fallback — used when no testimonials exist in database yet
 const FALLBACK = [
   { _id: 'f1', name: 'Rajesh Kumar', city: 'New Delhi', service: 'Vastu Check', rating: 5, text: 'Dr. PPS Tomar transformed our home completely. After his Vastu analysis, we experienced positive changes in our business and family harmony within 2 months.', avatar: '' },
   { _id: 'f2', name: 'Priya Sharma', city: 'Mumbai', service: 'Numerology Analysis', rating: 5, text: 'The numerology report was incredibly detailed. Dr. PPS Tomar identified issues I never knew existed and provided practical remedies that actually worked!', avatar: '' },
@@ -24,12 +24,10 @@ export default function TestimonialsSection() {
   const { lang } = useUIStore();
   const [items, setItems] = useState<TestimonialItem[]>([]);
   const [loading, setLoading] = useState(true);
-  // Default to 45,000+ — editable via Website Editor → Home → Testimonials section
   const [subtitle, setSubtitle] = useState('45,000+ happy clients across India');
   const [title, setTitle] = useState('What Our Clients Say');
 
   useEffect(() => {
-    // Fetch testimonials from DB, fall back to hardcoded list
     testimonialsAPI.getAll({ isActive: true })
       .then((r: any) => {
         const data: TestimonialItem[] = r?.data?.data || [];
@@ -38,7 +36,6 @@ export default function TestimonialsSection() {
       .catch(() => setItems(FALLBACK))
       .finally(() => setLoading(false));
 
-    // Fetch CMS overrides for title / subtitle
     contentAPI.getPage('home')
       .then((r: any) => {
         const d = r?.data?.data;
@@ -89,7 +86,16 @@ export default function TestimonialsSection() {
                 <p className="text-text-mid text-sm leading-relaxed mb-4 italic">"{t.text}"</p>
                 <div className="flex items-center gap-3">
                   {t.avatar ? (
-                    <img src={t.avatar} alt={t.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                    // Fix #10 — proper alt text describing purpose + lazy load
+                    <img
+                      src={t.avatar}
+                      alt={`${t.name} testimonial`}
+                      loading="lazy"
+                      decoding="async"
+                      width={40}
+                      height={40}
+                      className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                    />
                   ) : (
                     <div className="w-10 h-10 bg-saffron-gradient rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                       {t.name[0]}

@@ -11,7 +11,6 @@ export default function DashboardPage() {
   const router = useRouter();
   useEffect(() => { if (!isLoggedIn()) router.push('/login'); }, []);
   if (!user) return null;
-
   return (
     <>
       <Navbar />
