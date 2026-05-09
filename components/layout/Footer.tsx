@@ -26,7 +26,7 @@ export default function Footer() {
             </div>
             <div><div className="font-display font-bold text-xl text-white">Vastu Arya</div><div className="text-xs font-accent" style={{ color: '#D4A017' }}>IVAF Certified</div></div>
           </div>
-          <p className="text-sm leading-relaxed mb-4 text-gray-500">{lang === 'en' ? "India's premier Vastu Shastra & Astrology platform by IVAF Certified Expert Dr. PPS Tomar. 45,000+ Happy Clients." : 'IVAF प्रमाणित विशेषज्ञ डॉ. PPS द्वारा भारत का प्रमुख वास्तु और ज्योतिष प्लेटफॉर्म।'}</p>
+          <p className="text-sm leading-relaxed mb-4 text-gray-500">{lang === 'en' ? "India's premier Vastu Shastra & Astrology platform by IVAF Certified Expert Dr. PPS Tomar. 73,000+ Happy Clients." : 'IVAF प्रमाणित विशेषज्ञ डॉ. PPS द्वारा भारत का प्रमुख वास्तु और ज्योतिष प्लेटफॉर्म।'}</p>
         </div>
         <div>
           <h4 className="font-display font-semibold text-white mb-4">{lang === 'en' ? 'Services' : 'सेवाएं'}</h4>

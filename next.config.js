@@ -33,36 +33,32 @@ const nextConfig = {
   },
 
   // ── Redirects ──────────────────────────────────────────────────────────────
-  // Fix #13 — Case-insensitive redirects so old external links never 404
+  // NOTE: The vastuarya.com → www.vastuarya.com domain redirect is handled
+  // exclusively in Vercel Dashboard → Domains settings.
+  // DO NOT add it here — duplicate redirects cause ERR_TOO_MANY_REDIRECTS
+  // in Next.js RSC prefetch requests.
   async redirects() {
     return [
-      // Existing: bare-domain → www canonical (KEEP THIS)
-      {
-        source:      '/:path*',
-        has:         [{ type: 'host', value: 'vastuarya.com' }],
-        destination: 'https://www.vastuarya.com/:path*',
-        permanent:   true,
-      },
+      // Case-insensitive Vastu Store redirects
+      // permanent: false (307) — avoids browser-cache redirect loops with RSC router
+      { source: '/Vastu-Store',        destination: '/vastu-store',        permanent: false },
+      { source: '/Vastu-Store/:path*', destination: '/vastu-store/:path*', permanent: false },
+      { source: '/VASTU-STORE',        destination: '/vastu-store',        permanent: false },
+      { source: '/VASTU-STORE/:path*', destination: '/vastu-store/:path*', permanent: false },
 
-      // Fix #13a — Case-insensitive Vastu Store redirects
-      { source: '/Vastu-Store',        destination: '/vastu-store',        permanent: true },
-      { source: '/Vastu-Store/:path*', destination: '/vastu-store/:path*', permanent: true },
-      { source: '/VASTU-STORE',        destination: '/vastu-store',        permanent: true },
-      { source: '/VASTU-STORE/:path*', destination: '/vastu-store/:path*', permanent: true },
+      // Book appointment URL variants
+      { source: '/Book-Now',  destination: '/book-appointment', permanent: false },
+      { source: '/book-now',  destination: '/book-appointment', permanent: false },
+      { source: '/BOOK-NOW',  destination: '/book-appointment', permanent: false },
+      { source: '/Book',      destination: '/book-appointment', permanent: false },
 
-      // Fix #13b — All "Book Now" URL variants → /book-appointment
-      { source: '/Book-Now',  destination: '/book-appointment', permanent: true },
-      { source: '/book-now',  destination: '/book-appointment', permanent: true },
-      { source: '/BOOK-NOW',  destination: '/book-appointment', permanent: true },
-      { source: '/Book',      destination: '/book-appointment', permanent: true },
-
-      // Fix #13c — Other common case-mismatch URLs from external backlinks
-      { source: '/Services',         destination: '/services',         permanent: true },
-      { source: '/Services/:path*',  destination: '/services/:path*',  permanent: true },
-      { source: '/About',            destination: '/about',            permanent: true },
-      { source: '/Contact',          destination: '/contact',          permanent: true },
-      { source: '/Blog',             destination: '/blog',             permanent: true },
-      { source: '/Blog/:path*',      destination: '/blog/:path*',      permanent: true },
+      // Other common case-mismatch URLs from external backlinks
+      { source: '/Services',         destination: '/services',         permanent: false },
+      { source: '/Services/:path*',  destination: '/services/:path*',  permanent: false },
+      { source: '/About',            destination: '/about',            permanent: false },
+      { source: '/Contact',          destination: '/contact',          permanent: false },
+      { source: '/Blog',             destination: '/blog',             permanent: false },
+      { source: '/Blog/:path*',      destination: '/blog/:path*',      permanent: false },
     ];
   },
 
