@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { adminAPI, aiStatusAPI, api } from '../../lib/api';
+import { adminAPI, aiStatusAPI } from '../../lib/api';
 import { formatPrice } from '../../lib/utils';
 import Link from 'next/link';
 import { TrendingUp, Users, ShoppingBag, Calendar, Layers, Package, Globe, Sparkles, Rss, ImageIcon, MessageSquare, Settings, BookOpen, Wand2, AlertTriangle, CheckCircle, ArrowRight, Database, RefreshCw } from 'lucide-react';
