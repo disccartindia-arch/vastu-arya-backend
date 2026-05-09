@@ -5,7 +5,7 @@ import BookAppointmentClient from "./BookAppointmentClient";
 
 export const metadata: Metadata = buildMetadata({
   title:       "Book a Vastu Consultation - Dr. PPS Tomar | From Rs.11",
-  description: "Book a Vastu Shastra, Astrology, or Numerology consultation with IVAF Certified Expert Dr. PPS Tomar. Online and in-person sessions. Starting from just Rs.11. 45000+ satisfied clients.",
+  description: "Book a Vastu Shastra, Astrology, or Numerology consultation with IVAF Certified Expert Dr. PPS Tomar. Online and in-person sessions. Starting from just Rs.11. 73000+ satisfied clients.",
   path:        "/book-appointment",  // Fix #4: was "/services/book-appointment" — wrong canonical
 });
 

@@ -24,7 +24,7 @@ export default function TestimonialsSection() {
   const { lang } = useUIStore();
   const [items, setItems] = useState<TestimonialItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [subtitle, setSubtitle] = useState('45,000+ happy clients across India');
+  const [subtitle, setSubtitle] = useState('73,000+ happy clients across India');
   const [title, setTitle] = useState('What Our Clients Say');
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export default function TestimonialsSection() {
             {lang === 'en' ? title : 'हमारे ग्राहक क्या कहते हैं'}
           </h2>
           <p className="text-text-light">
-            {lang === 'en' ? subtitle : 'पूरे भारत में 45,000+ खुश ग्राहक'}
+            {lang === 'en' ? subtitle : 'पूरे भारत में 73,000+ खुश ग्राहक'}
           </p>
         </motion.div>
 

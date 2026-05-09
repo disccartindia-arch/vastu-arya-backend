@@ -7,7 +7,7 @@ const LOGO_URL  = 'https://www.vastuarya.com/logo.jpg';
 const TWITTER   = '@VastuArya';
 
 const DEFAULT_TITLE       = 'Vastu Arya - IVAF Certified Vastu and Astrology Consultancy | Dr. PPS Tomar';
-const DEFAULT_DESCRIPTION = "India's premier Vastu Shastra, Astrology and Numerology platform by Dr. PPS Tomar - IVAF Certified Expert. 45,000+ happy clients. Book a consultation from just Rs.11.";
+const DEFAULT_DESCRIPTION = "India's premier Vastu Shastra, Astrology and Numerology platform by Dr. PPS Tomar - IVAF Certified Expert. 73,000+ happy clients. Book a consultation from just Rs.11.";
 
 export interface PageSeoProps {
   title?:       string;
@@ -86,7 +86,7 @@ export const vastuAryaJsonLd = {
         '@type':       'AggregateRating',
         ratingValue:   '4.9',
         bestRating:    '5',
-        reviewCount:   '45000',
+        reviewCount:   '73000',
       },
       openingHoursSpecification: [
         { '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], opens: '09:00', closes: '20:00' },
