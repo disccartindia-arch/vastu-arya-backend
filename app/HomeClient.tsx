@@ -9,6 +9,8 @@ import AppointmentPopup from '../components/common/AppointmentPopup';
 import CartDrawer from '../components/common/CartDrawer';
 import WhatsAppButton from '../components/common/WhatsAppButton';
 import VastuAIGuide from '../components/common/VastuAIGuide';
+import HomepageSlider from '../components/home/HomepageSlider';
+import SitePopup from '../components/common/SitePopup';
 import ProductCard from '../components/store/ProductCard';
 import { useUIStore } from '../store/uiStore';
 import { useTranslation } from '../lib/i18n';
@@ -60,6 +62,7 @@ export default function HomePage() {
       <Navbar />
       <main>
         <HeroSection onBookClick={() => setShowAppointmentPopup(true)} settings={heroSettings} heroBgTheme={heroBgTheme} />
+        <HomepageSlider />
         <FeaturedServices services={services} onBookAppointment={() => setShowAppointmentPopup(true)} servicesButtonText={heroSettings?.servicesButtonText || t('home.services.viewAll')} />
 
         {/* Stats banner */}
@@ -142,6 +145,7 @@ export default function HomePage() {
       <CartDrawer />
       <WhatsAppButton />
       <VastuAIGuide />
+      <SitePopup />
       <button onClick={() => setShowAppointmentPopup(true)} className="fixed bottom-4 left-1/2 -translate-x-1/2 sm:hidden z-40 px-6 py-3 rounded-full font-bold text-sm text-white animate-pulse-orange" style={{ background: 'linear-gradient(135deg, #FF6B00, #FF8C33)', boxShadow: '0 4px 20px rgba(255,107,0,0.5)' }}>
         {t('nav.bookNow')}
       </button>
