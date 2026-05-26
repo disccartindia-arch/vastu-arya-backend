@@ -14,20 +14,70 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const { q = '', limit = 8 } = req.query;
     const query = String(q).trim();
-    if (!query || query.length < 2) return res.json({ success: true, data: { blogs: [], services: [], products: [], posts: [] } });
+    if (!query || query.length < 2) {
+      return res.json({ success: true, data: { blogs: [], services: [], products: [], posts: [] } });
+    }
 
     const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     const lim = Math.min(Number(limit), 20);
 
     const [blogs, services, products, posts] = await Promise.all([
-      Blog.find({ isPublished: true, $or: [{ 'title.en': regex }, { 'excerpt.en': regex }, { category: regex }, { tags: regex }] }).select('title slug category coverImage publishedAt').limit(lim),
-      Service.find({ isActive: true, $or: [{ 'title.en': regex }, { 'shortDesc.en': regex }, { category: regex }] }).select('title slug icon offerPrice category').limit(lim),
-      Product.find({ isActive: true, $or: [{ 'name.en': regex }, { category: regex }] }).select('name slug offerPrice images category').limit(lim),
-      Post.find({ isPublished: true, $or: [{ caption: regex }, { hashtags: regex }, { category: regex }] }).select('caption media type createdAt').limit(4),
+      Blog.find({
+        isPublished: true,
+        $or: [
+          { 'title.en': regex },
+          { 'excerpt.en': regex },
+          { category: regex },
+          { tags: regex },
+        ],
+      })
+        .select('title slug category coverImage publishedAt')
+        .limit(lim),
+
+      Service.find({
+        isActive: true,
+        $or: [
+          { 'title.en': regex },
+          { 'shortDesc.en': regex },
+          { category: regex },
+        ],
+      })
+        .select('title slug icon offerPrice originalPrice category')
+        .limit(lim),
+
+      // FIX: stock, rating, reviewCount, totalSold were missing from select.
+      // ProductCard uses product.stock to decide "Add to Cart" vs "Out of Stock".
+      // Without stock in the payload, (undefined > 0) === false → all cards showed
+      // "Out of Stock" in search even when the product had inventory.
+      Product.find({
+        isActive: true,
+        $or: [
+          { 'name.en': regex },
+          { 'name.hi': regex },
+          { category: regex },
+        ],
+      })
+        .select('name slug offerPrice price images category stock rating reviewCount totalSold isFeatured isNewLaunch')
+        .limit(lim),
+
+      Post.find({
+        isPublished: true,
+        $or: [
+          { caption: regex },
+          { hashtags: regex },
+          { category: regex },
+        ],
+      })
+        .select('caption media type createdAt')
+        .limit(4),
     ]);
 
-    // Log search asynchronously
-    SearchLog.create({ query: query.toLowerCase(), results: blogs.length + services.length + products.length, sessionId: req.headers['x-session-id'] as string }).catch(() => {});
+    // Log search asynchronously — never block the response
+    SearchLog.create({
+      query: query.toLowerCase(),
+      results: blogs.length + services.length + products.length,
+      sessionId: req.headers['x-session-id'] as string,
+    }).catch(() => {});
 
     res.json({ success: true, data: { blogs, services, products, posts } });
   } catch (error: any) {
@@ -56,10 +106,16 @@ router.get('/trending', async (req: Request, res: Response) => {
 router.post('/log-click', async (req: Request, res: Response) => {
   try {
     const { query, clickedSlug, clickedType } = req.body;
-    await SearchLog.create({ query: (query || '').toLowerCase(), results: 1, clickedSlug, clickedType, sessionId: req.headers['x-session-id'] as string });
+    await SearchLog.create({
+      query: (query || '').toLowerCase(),
+      results: 1,
+      clickedSlug,
+      clickedType,
+      sessionId: req.headers['x-session-id'] as string,
+    });
     res.json({ success: true });
   } catch {
-    res.json({ success: true }); // silent fail
+    res.json({ success: true }); // silent fail — analytics should never break UX
   }
 });
 
