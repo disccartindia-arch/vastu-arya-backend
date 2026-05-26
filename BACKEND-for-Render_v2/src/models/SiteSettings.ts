@@ -11,6 +11,7 @@ export interface ISiteSettings extends Document {
   address: string;
   socialLinks: { instagram?: string; facebook?: string; youtube?: string; twitter?: string };
   razorpayKeyId?: string;
+  upiIds?: string[];
   seo: { defaultTitle: string; defaultDescription: string; ogImage?: string };
   enableHindi: boolean;
   maintenanceMode: boolean;
@@ -33,6 +34,7 @@ const SiteSettingsSchema = new Schema<ISiteSettings>({
     twitter: { type: String, default: '' }
   },
   razorpayKeyId: { type: String },
+  upiIds: { type: [String], default: ['vastuarya@ybl', 'aryavarguna@ybl'] },
   seo: {
     defaultTitle: { type: String, default: 'Vastu Arya - Premium Vastu & Astrology Consultancy' },
     defaultDescription: { type: String, default: 'India\'s premier Vastu Shastra, Astrology, Numerology and Gemology consultation platform by Dr. PPS Tomar - IVAF Certified Expert.' },
