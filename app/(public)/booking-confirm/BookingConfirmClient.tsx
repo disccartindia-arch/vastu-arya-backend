@@ -1,14 +1,15 @@
 'use client';
 export const dynamic = 'force-dynamic';
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Navbar from '../../../components/layout/Navbar';
 import Footer from '../../../components/layout/Footer';
 import WhatsAppButton from '../../../components/common/WhatsAppButton';
 import { motion } from 'framer-motion';
-import { MessageCircle, CreditCard, Smartphone, Shield, Clock, Award, CheckCircle, Copy, Phone } from 'lucide-react';
+import { MessageCircle, CreditCard, Smartphone, Shield, Clock, Award, CheckCircle, Copy, Phone, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { bookingsAPI } from '../../../lib/api';
 function BookingContent() {
   const params = useSearchParams();
   const name = params.get('name') || 'Valued Customer';
@@ -16,18 +17,62 @@ function BookingContent() {
   const refParam = params.get('ref') || '';
   const [bookingRef] = useState(() => refParam || `VA${Date.now().toString().slice(-8).toUpperCase()}`);
   const [copied, setCopied] = useState(false);
-  const isConfirmed = !!refParam;
+  const [status, setStatus] = useState<'LOADING' | 'PENDING' | 'PAID' | 'CONFIRMED' | 'FAILED' | 'UNKNOWN'>(refParam ? 'LOADING' : 'PENDING');
+  const [isVerifying, setIsVerifying] = useState(false);
   const waMsg = `🙏 Namaste Dr. PPS Tomar!\n\nI want to confirm my Vastu consultation booking.\n\nName: ${name}\nPhone: ${phone}\nRef: ${bookingRef}`;
   const waUrl = `https://wa.me/917000343804?text=${encodeURIComponent(waMsg)}`;
+
+  const checkStatus = useCallback(async (isManual = false) => {
+    if (!refParam) return;
+    if (isManual) setIsVerifying(true);
+    try {
+      const res = await bookingsAPI.getById(refParam);
+      if (res.data.success && res.data.data) {
+        setStatus(res.data.data.status.toUpperCase());
+        if (isManual) {
+          if (['PAID', 'CONFIRMED'].includes(res.data.data.status.toUpperCase())) {
+            toast.success('Payment Verified!');
+          } else {
+            toast.error('Payment still pending verification.');
+          }
+        }
+      } else {
+        setStatus('UNKNOWN');
+      }
+    } catch (err) {
+      console.error('Error fetching booking status:', err);
+      setStatus('UNKNOWN');
+    } finally {
+      if (isManual) setIsVerifying(false);
+    }
+  }, [refParam]);
+
+  useEffect(() => {
+    if (refParam) {
+      checkStatus();
+    }
+  }, [refParam, checkStatus]);
+
   const copyRef = () => { if (!navigator.clipboard) return; navigator.clipboard.writeText(bookingRef).then(() => { setCopied(true); toast.success('Reference copied!'); setTimeout(() => setCopied(false), 2500); }); };
+  const isConfirmed = ['PAID', 'CONFIRMED'].includes(status);
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #FFFDF7 0%, #FFF8EE 50%, #FFFAF2 100%)' }}>
       <div className="max-w-xl mx-auto px-4 py-10 sm:py-16">
         <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
           <div className="w-20 h-20 rounded-full overflow-hidden border-4 mx-auto mb-5" style={{ borderColor: 'rgba(212,160,23,0.45)' }}><img src="/logo.jpg" alt="Vastu Arya" className="w-full h-full object-cover" /></div>
-          <div className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-1.5 rounded-full text-sm font-semibold mb-4"><CheckCircle size={15} />{isConfirmed ? 'Payment Confirmed! Booking Active' : 'Booking Request Received'}</div>
+          <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold mb-4 ${isConfirmed ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+            {status === 'LOADING' ? (
+              <div className="flex items-center gap-2"><RefreshCw size={15} className="animate-spin" /> Verifying Payment...</div>
+            ) : isConfirmed ? (
+              <><CheckCircle size={15} /> Payment Confirmed! Booking Active</>
+            ) : (
+              <><Clock size={15} /> Awaiting Payment Verification</>
+            )}
+          </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold mb-2" style={{ color: '#1A0A00' }}>Namaste, {name}! 🙏</h1>
-          <p className="text-gray-600 text-base leading-relaxed">{isConfirmed ? 'Your appointment with Dr. PPS Tomar is confirmed.' : 'Complete the booking below.'}</p>
+          <p className="text-gray-600 text-base leading-relaxed">
+            {status === 'LOADING' ? 'Checking your booking status...' : isConfirmed ? 'Your appointment with Dr. PPS Tomar is confirmed.' : 'Complete your booking or await manual verification.'}
+          </p>
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl p-5 shadow-sm mb-5 text-center" style={{ border: '1px solid rgba(212,160,23,0.25)' }}>
           <p className="text-xs text-gray-400 mb-1 tracking-wider uppercase">Booking Reference</p>
@@ -35,6 +80,18 @@ function BookingContent() {
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white rounded-2xl p-6 shadow-sm mb-5" style={{ border: '1px solid rgba(212,160,23,0.22)' }}>
           <h2 className="font-display font-bold text-lg mb-4" style={{ color: '#1A0A00' }}>{isConfirmed ? 'Connect with Dr. PPS Tomar' : 'Complete Your Booking — Only ₹11'}</h2>
+
+          {!isConfirmed && refParam && (
+            <button
+              onClick={() => checkStatus(true)}
+              disabled={isVerifying}
+              className="flex items-center justify-center gap-2 w-full p-3 rounded-xl mb-4 border border-orange-200 text-orange-700 font-semibold hover:bg-orange-50 transition-all disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={isVerifying ? 'animate-spin' : ''} />
+              {isVerifying ? 'Verifying...' : 'Click here if already paid'}
+            </button>
+          )}
+
           <a href={waUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 w-full p-4 rounded-xl mb-3 transition-all" style={{ background: 'linear-gradient(135deg, #25D366, #128C7E)', color: 'white' }}>
             <div className="w-11 h-11 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0"><MessageCircle size={22} /></div>
             <div className="flex-1 text-left"><p className="font-bold text-base">Book via WhatsApp</p><p className="text-sm opacity-90">Connect with Dr. PPS Tomar instantly</p></div>
@@ -42,7 +99,14 @@ function BookingContent() {
           </a>
           <div className="flex items-start gap-4 p-4 rounded-xl mb-3" style={{ background: '#FFF8EE', border: '1px solid rgba(255,107,0,0.2)' }}>
             <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,107,0,0.1)' }}><Smartphone size={20} style={{ color: '#FF6B00' }} /></div>
-            <div className="flex-1"><p className="font-bold text-sm mb-0.5" style={{ color: '#1A0A00' }}>Pay ₹11 via UPI</p><p className="text-xs text-gray-500 mb-2">Send ₹11 to the UPI ID, then WhatsApp the screenshot.</p><code className="text-xs bg-white px-3 py-1.5 rounded-lg border font-mono font-semibold" style={{ color: '#FF6B00', borderColor: 'rgba(255,107,0,0.25)' }}>vastuarya@upi</code></div>
+            <div className="flex-1">
+              <p className="font-bold text-sm mb-0.5" style={{ color: '#1A0A00' }}>Pay ₹11 via UPI</p>
+              <p className="text-xs text-gray-500 mb-2">Send ₹11 to either UPI ID, then WhatsApp the screenshot.</p>
+              <div className="flex flex-wrap gap-2">
+                <code className="text-xs bg-white px-3 py-1.5 rounded-lg border font-mono font-semibold" style={{ color: '#FF6B00', borderColor: 'rgba(255,107,0,0.25)' }}>vastuarya-1@okaxis</code>
+                <code className="text-xs bg-white px-3 py-1.5 rounded-lg border font-mono font-semibold" style={{ color: '#FF6B00', borderColor: 'rgba(255,107,0,0.25)' }}>vastuarya@ybl</code>
+              </div>
+            </div>
           </div>
         </motion.div>
         <div className="text-center mt-6"><Link href="/" className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline" style={{ color: '#FF6B00' }}>← Back to Home</Link></div>
