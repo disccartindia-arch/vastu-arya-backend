@@ -1,137 +1,126 @@
-// lib/razorpay.ts — Fixed: dynamic Razorpay key resolution
-// Priority order:
-//   1. NEXT_PUBLIC_RAZORPAY_KEY_ID (Vercel env var — fastest, set this for production)
-//   2. In-memory cache from a previous settings fetch
-//   3. Runtime fetch from /api/settings — works even without the env var
-import { paymentAPI } from './api';
-import { loadRazorpayScript } from './utils';
-import toast from 'react-hot-toast';
-
+// lib/razorpay.ts — VastuArya v2 (with verified-only redirect)
 let _cachedKey: string | null = null;
 
-async function resolveRazorpayKey(): Promise<string | null> {
-  // 1. Env var set at build time in Vercel (preferred)
-  const envKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-  if (envKey && envKey.startsWith('rzp_')) return envKey;
-
-  // 2. In-memory cache from a prior settings call
+export async function getRazorpayKey(): Promise<string> {
+  // 1. Build-time env (Vercel)
+  if (process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
+    return process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+  }
+  // 2. In-memory cache
   if (_cachedKey) return _cachedKey;
-
-  // 3. Runtime fetch from backend — the key_id (not key_secret) is safe to expose
+  // 3. Runtime fetch from backend
   try {
-    const { default: api } = await import('./api');
-    const res = await api.get('/settings');
-    const key: string | undefined = res?.data?.data?.razorpayKeyId;
-    if (key && key.startsWith('rzp_')) {
-      _cachedKey = key;
-      return key;
-    }
-  } catch (err) {
-    console.warn('[Razorpay] Could not fetch key from /api/settings:', err);
-  }
-
-  return null;
-}
-
-interface PaymentOptions {
-  amount: number;
-  name: string;
-  email?: string;
-  phone: string;
-  description: string;
-  type: 'product' | 'service' | 'booking';
-  orderData?: any;
-  onSuccess: (data: any) => void;
-  onFailure?: (error: any) => void;
-}
-
-export const initiateRazorpayPayment = async (options: PaymentOptions) => {
-  const razorpayKey = await resolveRazorpayKey();
-
-  if (!razorpayKey) {
-    console.error(
-      '[Razorpay] No key found.\n' +
-      '  Option A (recommended): add NEXT_PUBLIC_RAZORPAY_KEY_ID to Vercel env vars and redeploy.\n' +
-      '  Option B (no redeploy): go to Admin → Settings and paste your Razorpay key_id into the "Razorpay Key ID" field.'
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || '/api'}/settings/razorpay-key`,
+      { cache: 'no-store' }
     );
-    toast.error('Payment system is not configured. Please contact support.');
-    options.onFailure?.({ message: 'Razorpay key not configured', code: 'RAZORPAY_KEY_MISSING' });
-    return;
-  }
+    if (res.ok) {
+      const { key } = await res.json();
+      if (key) { _cachedKey = key; return key; }
+    }
+  } catch (_) {}
+  throw new Error('Razorpay key not available. Please add NEXT_PUBLIC_RAZORPAY_KEY_ID to Vercel env vars.');
+}
 
-  const loaded = await loadRazorpayScript();
-  if (!loaded) {
-    toast.error('Payment gateway failed to load. Check your internet connection and try again.');
-    options.onFailure?.({ message: 'Razorpay script failed to load' });
-    return;
-  }
+export function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined') return resolve(false);
+    if ((window as any).Razorpay) return resolve(true);
+    const s = document.createElement('script');
+    s.src   = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.async = true;
+    s.onload  = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+}
 
-  try {
-    const { data } = await paymentAPI.createOrder({ amount: options.amount, type: options.type });
-    if (!data.success) throw new Error(data.message || 'Failed to create payment order');
+export interface RazorpayBookingOptions {
+  orderId:    string;
+  amount:     number;        // in paise
+  currency?:  string;
+  name:       string;
+  phone:      string;
+  email?:     string;
+  bookingRef: string;
+  description?: string;
+}
 
-    const rzpOptions = {
-      key: razorpayKey,
-      amount: data.data.amount,
-      currency: 'INR',
-      name: 'Vastu Arya',
-      description: options.description,
-      image: '/logo.jpg',
-      order_id: data.data.orderId,
+export async function openRazorpayCheckout(
+  opts: RazorpayBookingOptions
+): Promise<void> {
+  const [loaded, key] = await Promise.all([loadRazorpayScript(), getRazorpayKey()]);
+  if (!loaded) throw new Error('Could not load Razorpay. Check your internet connection.');
+
+  return new Promise((resolve, reject) => {
+    const rzp = new (window as any).Razorpay({
+      key,
+      order_id:    opts.orderId,
+      amount:      opts.amount,
+      currency:    opts.currency || 'INR',
+      name:        'Vastu Arya',
+      description: opts.description || 'Vastu Consultation Booking',
+      image:       '/logo.png',
       prefill: {
-        name: options.name,
-        email: options.email || '',
-        contact: options.phone,
+        name:    opts.name,
+        contact: opts.phone,
+        email:   opts.email || '',
       },
-      theme: { color: '#FF6B00' },
-      modal: {
-        ondismiss: () => {
-          // Only show toast if user actively dismissed (not a script error)
-          toast.error('Payment cancelled.');
-          options.onFailure?.({ message: 'Payment dismissed by user' });
-        },
-      },
-      handler: async (response: any) => {
+      theme:  { color: '#FF6B00' },
+      modal:  { ondismiss: () => reject(new Error('dismissed')) },
+
+      // ── Razorpay success callback ──────────────────────────────────────
+      handler: async (response: {
+        razorpay_payment_id: string;
+        razorpay_order_id:   string;
+        razorpay_signature:  string;
+      }) => {
         try {
-          const verifyRes = await paymentAPI.verifyPayment({
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature,
-            orderData: options.orderData || {
-              name: options.name,
-              phone: options.phone,
-              email: options.email,
-              amount: options.amount,
-              serviceName: options.description,
-            },
-            type: options.type,
-          });
-          if (verifyRes.data.success) {
-            options.onSuccess(verifyRes.data.data);
+          // Send to backend for HMAC verification — NEVER trust frontend alone
+          const verifyRes = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || '/api'}/payment/verify`,
+            {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id:   response.razorpay_order_id,
+                razorpay_signature:  response.razorpay_signature,
+                bookingRef:          opts.bookingRef,
+              }),
+            }
+          );
+
+          const data = await verifyRes.json();
+
+          if (verifyRes.ok && data.success) {
+            // ✅ Verified — redirect to confirm page with paid status
+            window.location.href =
+              `/booking-confirm?status=paid&ref=${encodeURIComponent(opts.bookingRef)}&paymentId=${encodeURIComponent(response.razorpay_payment_id)}`;
+            resolve();
           } else {
-            throw new Error('Payment verification returned failure');
+            // Backend rejected — treat as pending, not failure
+            window.location.href =
+              `/payment-pending?ref=${encodeURIComponent(opts.bookingRef)}&name=${encodeURIComponent(opts.name)}`;
+            resolve();
           }
-        } catch (err: any) {
-          console.error('[Razorpay] Verification error:', err);
-          toast.error('Payment verification failed. Please contact support with your payment ID.');
-          options.onFailure?.(err);
+        } catch (err) {
+          // Network error during verify — mark pending (don't say failed — money may have moved)
+          window.location.href =
+            `/payment-pending?ref=${encodeURIComponent(opts.bookingRef)}&name=${encodeURIComponent(opts.name)}`;
+          resolve();
         }
       },
-    };
+    });
 
-    const rzp = new (window as any).Razorpay(rzpOptions);
-
-    // Handle payment failures surfaced by Razorpay's own error events
+    // ── Razorpay failure event ─────────────────────────────────────────
     rzp.on('payment.failed', (resp: any) => {
-      console.error('[Razorpay] Payment failed:', resp.error);
-      toast.error(`Payment failed: ${resp.error?.description || 'Unknown error'}`);
-      options.onFailure?.(resp.error);
+      const reason = resp?.error?.description || resp?.error?.reason || 'Payment failed';
+      window.location.href =
+        `/payment-failed?ref=${encodeURIComponent(opts.bookingRef)}&reason=${encodeURIComponent(reason)}`;
+      reject(new Error(reason));
     });
 
     rzp.open();
-  } catch (error: any) {
-    console.error('[Razorpay] Order creation error:', error);
-    toast.error(error.response?.data?.message || error.message || 'Payment initiation failed. Please try again.');
-    options.onFailure?.(error);
-  }
-};
+  });
+}
