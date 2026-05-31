@@ -1,135 +1,113 @@
-/// <reference types="node" />
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-import path from 'path';
+// server.ts — VastuArya v2 (register payment routes)
+// 🔴 MERGE this into your existing server.ts — do not replace the whole file.
+// Find the section where you import routes and add these lines:
 
+/*
+  ─── ADD THESE IMPORTS ────────────────────────────────────────────────────────
+  import paymentRoutes from './routes/payment.routes';
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ─── WEBHOOK ROUTE MUST COME BEFORE express.json() ───────────────────────────
+  Add this BEFORE app.use(express.json()):
+
+    app.use(
+      '/api/payment/webhook',
+      express.raw({ type: 'application/json' }),
+      paymentRoutes
+    );
+
+  ─── THEN register normal payment routes AFTER express.json() ────────────────
+    app.use('/api/payment', paymentRoutes);
+
+  ─── SEED PaymentSettings on startup ─────────────────────────────────────────
+  Add to your DB connect callback:
+
+    import PaymentSettings from './models/PaymentSettings';
+
+    mongoose.connect(MONGO_URI).then(async () => {
+      console.log('MongoDB connected');
+
+      // Seed default payment settings if not present
+      const existing = await PaymentSettings.findOne();
+      if (!existing) {
+        await PaymentSettings.create({
+          primaryUPI:      'VASTUARYA@ybl',
+          fallbackUPI:     'ARYAVAR@ybl',
+          payeeName:       'Vastu Arya',
+          razorpayEnabled: true,
+          upiEnabled:      true,
+          fallbackEnabled: true,
+          codEnabled:      false,
+        });
+        console.log('PaymentSettings seeded');
+      }
+    });
+*/
+
+// ─── FULL MINIMAL server.ts EXAMPLE ──────────────────────────────────────────
+// Only use this if you're starting fresh. Otherwise follow the merge notes above.
+
+import express    from 'express';
+import cors       from 'cors';
+import mongoose   from 'mongoose';
+import dotenv     from 'dotenv';
 dotenv.config();
-const env = (process as any).env;
-const con = (console as any);
 
-import authRoutes from './routes/auth.routes';
-import serviceRoutes from './routes/service.routes';
-import productRoutes from './routes/product.routes';
-import orderRoutes from './routes/order.routes';
-import bookingRoutes from './routes/booking.routes';
-import blogRoutes from './routes/blog.routes';
 import paymentRoutes from './routes/payment.routes';
-import adminRoutes from './routes/admin.routes';
-import settingsRoutes from './routes/settings.routes';
-import uploadRoutes from './routes/upload.routes';
-import reviewRoutes from './routes/review.routes';
-import contentRoutes from './routes/content.routes';
-import configRoutes from './routes/config.routes';
-import homepageRoutes from './routes/homepage.routes';
-import searchRoutes from './routes/search.routes';
-import postRoutes from './routes/post.routes';
-import aiRoutes from './routes/ai.routes';
-import aiSettingsRoutes from './routes/aiSettings.routes';
-import productGeneratorRoutes from './routes/productGenerator.routes';
-import { errorMiddleware } from './middleware/error.middleware';
-import { seedDatabase } from './utils/seed';
+import PaymentSettings from './models/PaymentSettings';
+// ... your other route imports ...
 
-const app = express();
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+const app  = express();
+const PORT = process.env.PORT || 5000;
 
-// ─── CORS ─────────────────────────────────────────────────────────────────────
-// Priority order:
-//   1. FRONTEND_URL env var (set this in Render to your production domain)
-//   2. Hardcoded production domains (vastuarya.com + www)
-//   3. Any *.vercel.app preview URL (covers all Vercel preview deployments)
-//   4. localhost for local dev
-
-const FRONTEND_URL = env.FRONTEND_URL || '';
-const isProduction = env.NODE_ENV === 'production';
-
-// Static allowed origins
-const STATIC_ORIGINS = [
-  FRONTEND_URL,
-  'https://vastuarya.com',
-  'https://www.vastuarya.com',
-  'https://vastu-arya-frontend.vercel.app',
-  'https://vastuarya.vercel.app',
-].filter(Boolean);
-
-// Pattern-based allowed origins (covers all Vercel preview URLs)
-const ALLOWED_PATTERNS = [
-  /^https:\/\/vastu-arya-frontend.*\.vercel\.app$/,   // all preview deploys
-  /^https:\/\/vastuarya.*\.vercel\.app$/,             // any vastuarya* vercel URL
-  /^http:\/\/localhost(:\d+)?$/,                      // local dev
-  /^http:\/\/127\.0\.0\.1(:\d+)?$/,                  // local dev alt
-];
-
-function isOriginAllowed(origin: string): boolean {
-  if (STATIC_ORIGINS.includes(origin)) return true;
-  return ALLOWED_PATTERNS.some(pattern => pattern.test(origin));
-}
-
+// ── CORS ──────────────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: (origin: any, callback: any) => {
-    // Allow requests with no origin (server-to-server, curl, Postman, mobile apps)
-    if (!origin) return callback(null, true);
-    if (isOriginAllowed(origin)) return callback(null, true);
-    con.warn(`[CORS] Blocked origin: ${origin}`);
-    return callback(new Error(`CORS policy: origin ${origin} not allowed`));
-  },
+  origin:      process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-session-id'],
-  optionsSuccessStatus: 200,
 }));
 
-// Handle preflight for all routes
-app.options('*', cors());
+// ── Razorpay webhook (raw body BEFORE json parser) ────────────────────────────
+app.use(
+  '/api/payment/webhook',
+  express.raw({ type: 'application/json' }),
+  paymentRoutes
+);
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-if (env.NODE_ENV !== 'production') app.use(morgan('dev'));
+// ── Body parsers ──────────────────────────────────────────────────────────────
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.get('/health', (req: any, res: any) => {
-  res.json({ status: 'ok', message: 'Vastu Arya API v3.0', timestamp: new Date().toISOString() });
-});
-
-app.use('/api/auth', authRoutes);
-app.use('/api/services', serviceRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/blogs', blogRoutes);
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/payment', paymentRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/upload', uploadRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/api/content', contentRoutes);
-app.use('/api/config', configRoutes);
-app.use('/api/homepage', homepageRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/posts', postRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/product-generator', productGeneratorRoutes);
-app.use('/api/ai-settings', aiSettingsRoutes);
+// app.use('/api/bookings', bookingRoutes);
+// app.use('/api/orders',   orderRoutes);
+// ... your other routes ...
 
-app.use('*', (req: any, res: any) => res.status(404).json({ success: false, message: 'Route not found' }));
-app.use(errorMiddleware);
+// ── DB + Start ────────────────────────────────────────────────────────────────
+mongoose.connect(process.env.MONGO_URI!)
+  .then(async () => {
+    console.log('MongoDB connected');
 
-const PORT = parseInt(env.PORT || '5000', 10);
+    // Seed default payment settings if absent
+    const existing = await PaymentSettings.findOne();
+    if (!existing) {
+      await PaymentSettings.create({
+        primaryUPI:      'VASTUARYA@ybl',
+        fallbackUPI:     'ARYAVAR@ybl',
+        payeeName:       'Vastu Arya',
+        razorpayEnabled: true,
+        upiEnabled:      true,
+        fallbackEnabled: true,
+        codEnabled:      false,
+      });
+      console.log('✅ PaymentSettings seeded');
+    }
 
-const connectAndStart = async () => {
-  try {
-    if (!env.MONGO_URI) throw new Error('MONGO_URI not set');
-    await mongoose.connect(env.MONGO_URI as string);
-    con.log('MongoDB connected');
-    seedDatabase().catch((e: any) => con.warn('[Seed] Auto-seed warning:', e.message));
-    app.listen(PORT, () => con.log(`Vastu Arya API v3.0 on port ${PORT}`));
-  } catch (error) {
-    con.error('Startup failed:', error);
-    (process as any).exit(1);
-  }
-};
-connectAndStart();
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  })
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
+
 export default app;
