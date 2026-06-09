@@ -1,27 +1,33 @@
 'use client';
 export const dynamic = 'force-dynamic';
-import { Suspense, useState } from 'react';
+/**
+ * OrderStatusClient.tsx — FIXED
+ * - Shows upi_pending status correctly
+ * - Status always fetched from backend DB
+ */
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Navbar from '../../../components/layout/Navbar';
 import Footer from '../../../components/layout/Footer';
 import WhatsAppButton from '../../../components/common/WhatsAppButton';
-import { Search, CheckCircle, Clock, XCircle, AlertCircle, RefreshCw, MessageCircle, Package, Calendar } from 'lucide-react';
+import { Search, CheckCircle, Clock, XCircle, AlertCircle, RefreshCw, MessageCircle, Package, Calendar, QrCode } from 'lucide-react';
 import Link from 'next/link';
 import api from '../../../lib/api';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  paid:          { label: 'Paid & Confirmed', color: 'text-green-700',  bg: 'bg-green-100',  icon: CheckCircle },
-  pending:       { label: 'Pending',          color: 'text-amber-700',  bg: 'bg-amber-100',  icon: Clock },
-  awaiting_payment: { label: 'Awaiting Payment', color: 'text-amber-700', bg: 'bg-amber-100', icon: Clock },
-  failed:        { label: 'Failed',           color: 'text-red-600',    bg: 'bg-red-100',    icon: XCircle },
-  cancelled:     { label: 'Cancelled',        color: 'text-gray-600',   bg: 'bg-gray-100',   icon: XCircle },
-  cod_pending:   { label: 'COD Pending',      color: 'text-blue-700',   bg: 'bg-blue-100',   icon: Package },
-  processing:    { label: 'Processing',       color: 'text-blue-700',   bg: 'bg-blue-100',   icon: RefreshCw },
-  shipped:       { label: 'Shipped',          color: 'text-indigo-700', bg: 'bg-indigo-100', icon: Package },
-  delivered:     { label: 'Delivered',        color: 'text-green-700',  bg: 'bg-green-100',  icon: CheckCircle },
-  completed:     { label: 'Completed',        color: 'text-green-700',  bg: 'bg-green-100',  icon: CheckCircle },
-  called:        { label: 'Called',           color: 'text-green-700',  bg: 'bg-green-100',  icon: CheckCircle },
-  refunded:      { label: 'Refunded',         color: 'text-purple-700', bg: 'bg-purple-100', icon: RefreshCw },
+  paid:             { label: 'Paid & Confirmed',      color: 'text-green-700',  bg: 'bg-green-100',  icon: CheckCircle },
+  pending:          { label: 'Pending Payment',        color: 'text-amber-700',  bg: 'bg-amber-100',  icon: Clock },
+  upi_pending:      { label: 'UPI Verification Pending', color: 'text-blue-700',  bg: 'bg-blue-100',   icon: Clock },
+  awaiting_payment: { label: 'Awaiting Payment',       color: 'text-amber-700',  bg: 'bg-amber-100',  icon: Clock },
+  failed:           { label: 'Failed',                 color: 'text-red-600',    bg: 'bg-red-100',    icon: XCircle },
+  cancelled:        { label: 'Cancelled',              color: 'text-gray-600',   bg: 'bg-gray-100',   icon: XCircle },
+  cod_pending:      { label: 'COD Pending',            color: 'text-blue-700',   bg: 'bg-blue-100',   icon: Package },
+  processing:       { label: 'Processing',             color: 'text-blue-700',   bg: 'bg-blue-100',   icon: RefreshCw },
+  shipped:          { label: 'Shipped',                color: 'text-indigo-700', bg: 'bg-indigo-100', icon: Package },
+  delivered:        { label: 'Delivered',              color: 'text-green-700',  bg: 'bg-green-100',  icon: CheckCircle },
+  completed:        { label: 'Completed',              color: 'text-green-700',  bg: 'bg-green-100',  icon: CheckCircle },
+  called:           { label: 'Called',                 color: 'text-green-700',  bg: 'bg-green-100',  icon: CheckCircle },
+  refunded:         { label: 'Refunded',               color: 'text-purple-700', bg: 'bg-purple-100', icon: RefreshCw },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -49,7 +55,6 @@ function OrderStatusContent() {
   const router  = useRouter();
   const initRef = params.get('ref') || '';
 
-  const [ref, setRef]         = useState(initRef);
   const [query, setQuery]     = useState(initRef);
   const [result, setResult]   = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -70,11 +75,10 @@ function OrderStatusContent() {
     }
   };
 
-  // Auto-search if ref passed in URL
-  useState(() => { if (initRef) search(initRef); });
+  useEffect(() => { if (initRef) search(initRef); }, []);
 
   const d    = result?.data;
-  const type = result?.type; // 'booking' | 'order'
+  const type = result?.type;
 
   const waMsg = d
     ? encodeURIComponent(`🙏 Namaste!\n\nRef: ${d.id}\nName: ${d.name}\nStatus: ${d.paymentStatus}\n\nPlease assist.`)
@@ -83,26 +87,17 @@ function OrderStatusContent() {
   return (
     <main className="min-h-screen bg-cream py-12">
       <div className="max-w-lg mx-auto px-4">
-
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="text-4xl mb-3">🕉️</div>
           <h1 className="font-display text-3xl font-bold text-text-dark mb-1">Order Status</h1>
           <p className="text-text-light text-sm">Enter your booking reference or order ID</p>
         </div>
 
-        {/* Search bar */}
         <div className="flex gap-2 mb-6">
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && search()}
+          <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && search()}
             placeholder="e.g. BK17799884… or ORD176…"
-            className="flex-1 px-4 py-3 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-primary"
-          />
-          <button
-            onClick={() => search()}
-            disabled={loading}
+            className="flex-1 px-4 py-3 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-primary"/>
+          <button onClick={() => search()} disabled={loading}
             className="px-5 py-3 rounded-xl font-bold text-white text-sm disabled:opacity-60 flex items-center gap-2"
             style={{ background: 'linear-gradient(135deg,#FF6B00,#FF9933)' }}>
             {loading ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
@@ -110,7 +105,6 @@ function OrderStatusContent() {
           </button>
         </div>
 
-        {/* Error */}
         {error && (
           <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl mb-4">
             <AlertCircle size={18} className="text-red-500 flex-shrink-0" />
@@ -118,30 +112,22 @@ function OrderStatusContent() {
           </div>
         )}
 
-        {/* Result */}
         {d && (
           <div className="space-y-4">
-            {/* Status card */}
             <div className="bg-white rounded-2xl p-5 shadow-sm" style={{ border: '1px solid rgba(212,160,23,0.2)' }}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  {type === 'booking'
-                    ? <Calendar size={18} className="text-primary" />
-                    : <Package size={18} className="text-primary" />}
-                  <span className="font-bold text-gray-800 text-sm">
-                    {type === 'booking' ? 'Appointment Booking' : 'Store Order'}
-                  </span>
+                  {type === 'booking' ? <Calendar size={18} className="text-primary" /> : <Package size={18} className="text-primary" />}
+                  <span className="font-bold text-gray-800 text-sm">{type === 'booking' ? 'Appointment Booking' : 'Store Order'}</span>
                 </div>
                 <StatusBadge status={d.paymentStatus || d.status} />
               </div>
 
-              {/* Reference */}
               <div className="bg-orange-50 rounded-xl p-3 text-center mb-4" style={{ border: '1px solid rgba(255,107,0,0.2)' }}>
                 <p className="text-xs text-gray-400 mb-0.5">{type === 'booking' ? 'Booking Reference' : 'Order ID'}</p>
                 <p className="font-mono font-bold text-lg text-primary">{d.id}</p>
               </div>
 
-              {/* Details */}
               <div className="space-y-0">
                 <Row label="Customer Name"   value={d.name} />
                 <Row label="Phone"           value={d.phone} />
@@ -151,13 +137,13 @@ function OrderStatusContent() {
                 <Row label="Payment Status"  value={d.paymentStatus} />
                 <Row label="Booking Status"  value={d.status} />
                 <Row label="Razorpay ID"     value={d.paymentId} />
+                <Row label="UPI Ref"         value={d.upiRef} />
                 <Row label="Transaction Ref" value={d.transactionRef} />
                 <Row label="Verified At"     value={d.verifiedAt ? new Date(d.verifiedAt).toLocaleString('en-IN') : null} />
                 <Row label="Created"         value={d.createdAt ? new Date(d.createdAt).toLocaleString('en-IN') : null} />
               </div>
             </div>
 
-            {/* Order items (for product orders) */}
             {type === 'order' && d.items?.length > 0 && (
               <div className="bg-white rounded-2xl p-5 shadow-sm" style={{ border: '1px solid rgba(212,160,23,0.2)' }}>
                 <h3 className="font-semibold text-gray-800 text-sm mb-3">Order Items</h3>
@@ -172,18 +158,22 @@ function OrderStatusContent() {
               </div>
             )}
 
-            {/* Actions */}
             <div className="space-y-3">
-              {/* Retry if pending */}
               {(d.paymentStatus === 'pending' || d.paymentStatus === 'failed') && (
-                <Link href={`/book-appointment`}
+                <Link href="/book-appointment"
                   className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl font-bold text-white text-sm"
                   style={{ background: 'linear-gradient(135deg,#FF6B00,#FF9933)' }}>
                   <RefreshCw size={16} /> Retry Payment
                 </Link>
               )}
 
-              {/* WhatsApp support */}
+              {d.paymentStatus === 'upi_pending' && (
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-200 text-sm text-blue-700">
+                  <p className="font-semibold mb-1">UPI Payment Under Verification</p>
+                  <p>Our team is verifying your UPI payment. Booking will be confirmed within 30 minutes.</p>
+                </div>
+              )}
+
               <a href={`https://wa.me/917000343804?text=${waMsg}`} target="_blank" rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl bg-[#25D366] text-white font-semibold text-sm">
                 <MessageCircle size={16} /> Contact on WhatsApp
@@ -205,11 +195,7 @@ export default function OrderStatusPage() {
   return (
     <>
       <Navbar />
-      <Suspense fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-4xl animate-spin">🕉️</div>
-        </div>
-      }>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-4xl animate-spin">🕉️</div></div>}>
         <OrderStatusContent />
       </Suspense>
       <Footer />
