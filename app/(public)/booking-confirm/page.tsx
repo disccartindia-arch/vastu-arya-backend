@@ -1,7 +1,12 @@
-import type { Metadata } from 'next';
-import BookingConfirmClient from './BookingConfirmClient';
-export const metadata: Metadata = {
-  title: 'Booking Confirmation | Vastu Arya',
-  description: 'Your Vastu consultation booking confirmation.',
-};
-export default BookingConfirmClient;
+import type { Metadata } from "next";
+import { buildMetadata } from "@/lib/seo";
+import BookingConfirmClient from "./BookingConfirmClient";
+
+export const metadata: Metadata = buildMetadata({
+  title: "Booking Confirmed | Vastu Arya",
+  description: "",
+  path: "/booking-confirm",
+  noIndex: true,
+});
+
+export default function Page() { return <BookingConfirmClient />; }

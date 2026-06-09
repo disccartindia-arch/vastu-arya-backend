@@ -56,6 +56,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // e.g. lang switcher, user state, timestamps
     <html lang="en" suppressHydrationWarning>
       <head>
+      <!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-H2BMEXCRQT"></script>
+<script
+  dangerouslySetInnerHTML={{
+    __html: `
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-H2BMEXCRQT');
+    `,
+  }}
+/>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <script
