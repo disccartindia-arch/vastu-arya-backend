@@ -1,7 +1,6 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from 'next';
 import dynamic from 'next/dynamic';
-import Script from 'next/script';
 import './globals.css';
 import { Toaster } from 'react-hot-toast';
 import { vastuAryaJsonLd } from '@/lib/seo';
@@ -53,8 +52,22 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
+    // suppressHydrationWarning: handles any remaining client/server differences
+    // e.g. lang switcher, user state, timestamps
     <html lang="en" suppressHydrationWarning>
       <head>
+      <!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-H2BMEXCRQT"></script>
+<script
+  dangerouslySetInnerHTML={{
+    __html: `
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-H2BMEXCRQT');
+    `,
+  }}
+/>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <script
@@ -63,21 +76,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-body bg-cream" suppressHydrationWarning>
-
-        {/* Google Analytics GA4 — G-H2BMEXCRQT */}
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-H2BMEXCRQT"
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-H2BMEXCRQT');
-          `}
-        </Script>
-
         <LuxuryBackground />
         <Providers>
           <div className="relative z-10">{children}</div>
@@ -86,12 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           position="top-right"
           toastOptions={{
             duration: 3500,
-            style: {
-              background: '#1A0A00',
-              color: '#FFF8F0',
-              fontFamily: 'DM Sans, sans-serif',
-              border: '1px solid rgba(212,160,23,0.2)',
-            },
+            style: { background: '#1A0A00', color: '#FFF8F0', fontFamily: 'DM Sans, sans-serif', border: '1px solid rgba(212,160,23,0.2)' },
             success: { iconTheme: { primary: '#D4A017', secondary: '#FFF8F0' } },
           }}
         />

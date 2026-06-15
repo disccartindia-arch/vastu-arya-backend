@@ -1,139 +1,76 @@
 /**
  * app/api/payment/upi-pending/route.ts
- * ─────────────────────────────────────────────────────────────────
- * SELF-CONTAINED — no imports from @/models or @/lib
- * Uses inline MongoDB connection + inline schema definitions.
- * Drop this file in and it will work regardless of project structure.
- * ─────────────────────────────────────────────────────────────────
+ * Zero external dependencies — uses only Next.js built-ins and Node.js fs.
+ * Stores submissions as JSON files until you wire up your DB.
+ * Replace the saveToDatabase() function body with your project's DB call.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, readFile } from "fs/promises";
 import path from "path";
-import mongoose from "mongoose";
 
-// ── Inline MongoDB connection ─────────────────────────────────────
-// Works whether your project has lib/mongodb.ts or not
-const MONGODB_URI = process.env.MONGODB_URI ?? process.env.DATABASE_URL ?? "";
+// ── Save to DB ────────────────────────────────────────────────────
+// Replace this function body with your project's actual DB call.
+// Examples shown below — uncomment the one that matches your project.
+async function saveToDatabase(record: Record<string, unknown>) {
+  // ── OPTION A: Your project uses a connectDB() from lib/mongodb ──
+  // const { connectDB } = await import("@/lib/mongodb");
+  // const { default: UpiPayment } = await import("@/models/UpiPayment");
+  // await connectDB();
+  // await UpiPayment.create(record);
 
-let isConnected = false;
+  // ── OPTION B: Your project uses native mongodb client ───────────
+  // const { MongoClient } = await import("mongodb");
+  // const client = new MongoClient(process.env.MONGODB_URI!);
+  // await client.connect();
+  // const db = client.db();
+  // await db.collection("upi_payments").insertOne(record);
+  // await client.close();
 
-async function connectDB() {
-  if (isConnected && mongoose.connection.readyState === 1) return;
-  if (!MONGODB_URI) throw new Error("MONGODB_URI environment variable is not set.");
-  await mongoose.connect(MONGODB_URI);
-  isConnected = true;
+  // ── OPTION C: Fallback — write to a JSON file (works always) ────
+  const dir = path.join(process.cwd(), "data", "upi-pending");
+  await mkdir(dir, { recursive: true });
+  const filename = `${record.referenceId}.json`;
+  await writeFile(
+    path.join(dir, filename),
+    JSON.stringify(record, null, 2)
+  );
 }
 
-// ── Inline UpiPayment schema ──────────────────────────────────────
-// Defined inline so there's no dependency on @/models/UpiPayment
-const upiPaymentSchema = new mongoose.Schema(
-  {
-    referenceId:   { type: String, required: true, unique: true },
-    itemId:        { type: String, required: true },
-    itemType:      { type: String, required: true },
-    bookingId:     { type: String, default: null },
-    amount:        { type: Number, required: true },
-    upiId:         { type: String, required: true },
-    transactionId: { type: String, default: null },
-    screenshotUrl: { type: String, required: true },
-    uploaderName:  { type: String, required: true },
-    uploaderPhone: { type: String, required: true },
-    status:        { type: String, default: "UPI_PENDING" },
-    submittedAt:   { type: Date, default: Date.now },
-    verifiedAt:    { type: Date, default: null },
-    verifiedBy:    { type: String, default: null },
-    adminNotes:    { type: String, default: null },
-  },
-  { timestamps: true, collection: "upi_payments" }
-);
-
-// Use existing model if already registered (Next.js hot-reload safety)
-const UpiPayment =
-  mongoose.models.UpiPayment ??
-  mongoose.model("UpiPayment", upiPaymentSchema);
-
-// ── Inline helper: update booking paymentStatus ───────────────────
-// Tries to update a booking without importing the Booking model.
-// Uses a generic schema so it works with any booking collection name.
-async function tryUpdateBooking(bookingId: string, referenceId: string, upiPaymentId: string) {
-  try {
-    // Try common collection names used in VastuArya
-    const collectionNames = ["bookings", "appointments", "orders"];
-    const db = mongoose.connection.db;
-    if (!db) return;
-
-    for (const col of collectionNames) {
-      const result = await db.collection(col).updateOne(
-        { _id: new mongoose.Types.ObjectId(bookingId) },
-        {
-          $set: {
-            paymentStatus: "UPI_PENDING",
-            upiReferenceId: referenceId,
-            upiPaymentId: upiPaymentId,
-          },
-        }
-      );
-      if (result.matchedCount > 0) break; // Found and updated — stop
-    }
-  } catch (err) {
-    // Non-fatal — booking update failure should not block the response
-    console.warn("[upi-pending] Could not update booking:", (err as Error).message);
-  }
-}
-
-// ── POST handler ──────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
 
-    const screenshot   = formData.get("screenshot") as File | null;
-    const amount       = Number(formData.get("amount"));
-    const itemId       = formData.get("itemId") as string;
-    const itemType     = formData.get("itemType") as string;
-    const upiId        = formData.get("upiId") as string;
-    const transactionId = formData.get("transactionId") as string | null;
-    const uploaderName = formData.get("uploaderName") as string;
-    const uploaderPhone = formData.get("uploaderPhone") as string;
-    const bookingId    = formData.get("bookingId") as string | null;
+    const screenshot    = formData.get("screenshot") as File | null;
+    const amount        = Number(formData.get("amount"));
+    const itemId        = String(formData.get("itemId") ?? "");
+    const itemType      = String(formData.get("itemType") ?? "");
+    const upiId         = String(formData.get("upiId") ?? "");
+    const transactionId = String(formData.get("transactionId") ?? "");
+    const uploaderName  = String(formData.get("uploaderName") ?? "");
+    const uploaderPhone = String(formData.get("uploaderPhone") ?? "");
+    const bookingId     = String(formData.get("bookingId") ?? "");
 
-    // Validation
-    if (!screenshot) {
+    if (!screenshot)
       return NextResponse.json({ error: "Screenshot is required." }, { status: 400 });
-    }
-    if (!amount || amount <= 0) {
+    if (!amount || amount <= 0)
       return NextResponse.json({ error: "Invalid amount." }, { status: 400 });
-    }
-    if (!itemId || !itemType) {
-      return NextResponse.json({ error: "Item details are required." }, { status: 400 });
-    }
-    if (!uploaderName?.trim()) {
+    if (!uploaderName.trim())
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
-    }
-    if (!uploaderPhone?.trim() || uploaderPhone.replace(/\D/g, "").length < 10) {
+    if (uploaderPhone.replace(/\D/g, "").length < 10)
       return NextResponse.json({ error: "Valid 10-digit mobile number is required." }, { status: 400 });
-    }
 
     // Save screenshot
     const uploadsDir = path.join(process.cwd(), "public", "uploads", "upi-screenshots");
     await mkdir(uploadsDir, { recursive: true });
-
-    const bytes = await screenshot.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const ext = screenshot.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const ext      = (screenshot.name.split(".").pop() ?? "jpg").toLowerCase();
     const filename = `upi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    await writeFile(path.join(uploadsDir, filename), buffer);
+    await writeFile(path.join(uploadsDir, filename), Buffer.from(await screenshot.arrayBuffer()));
     const screenshotUrl = `/uploads/upi-screenshots/${filename}`;
 
-    // Connect DB + create record
-    await connectDB();
+    const referenceId = `UPI-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 
-    const referenceId = `UPI-${Date.now().toString(36).toUpperCase()}-${Math.random()
-      .toString(36)
-      .slice(2, 5)
-      .toUpperCase()}`;
-
-    const upiPayment = await UpiPayment.create({
+    const record = {
       referenceId,
       itemId,
       itemType,
@@ -142,28 +79,29 @@ export async function POST(req: NextRequest) {
       upiId,
       transactionId: transactionId || null,
       screenshotUrl,
-      uploaderName: uploaderName.trim(),
+      uploaderName:  uploaderName.trim(),
       uploaderPhone: uploaderPhone.trim(),
-      status: "UPI_PENDING",
-      submittedAt: new Date(),
-    });
+      status:        "UPI_PENDING",
+      submittedAt:   new Date().toISOString(),
+      verifiedAt:    null,
+      verifiedBy:    null,
+      adminNotes:    null,
+    };
 
-    // Try to update booking (non-fatal if it fails)
-    if (bookingId) {
-      await tryUpdateBooking(bookingId, referenceId, String(upiPayment._id));
-    }
+    await saveToDatabase(record);
 
     return NextResponse.json({
-      success: true,
+      success:     true,
       referenceId,
-      message: "Payment screenshot received. Pending admin verification.",
-      status: "UPI_PENDING",
+      message:     "Payment screenshot received. Pending admin verification.",
+      status:      "UPI_PENDING",
     });
 
-  } catch (err: any) {
-    console.error("[upi-pending] Error:", err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("[upi-pending]", message);
     return NextResponse.json(
-      { error: "Failed to submit payment. Please try again or contact support." },
+      { error: "Failed to submit payment. Please try again." },
       { status: 500 }
     );
   }
