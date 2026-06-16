@@ -6,6 +6,7 @@ import { Save, Plus, X, Globe, Phone, Sparkles, BarChart2, ArrowUp, ArrowDown, R
 
 type Tab = 'brand' | 'hero' | 'stats' | 'background';
 
+// CHANGED: 100+ → 25+ in servicesButtonText and stats
 const DEFAULTS = {
   brandName:'Vastu Arya',brandSubtitle:'IVAF Certified',brandFontSize:'18',
   contactPhone:'+91-7000343804',contactEmail:'contact@vastuarya.com',
@@ -14,9 +15,9 @@ const DEFAULTS = {
   heroSubheading:"India's Premier Vastu Shastra & Astrology Platform by Dr. PPS Tomar",
   cta1Text:'Book Appointment @ ₹11',cta1Link:'/book-appointment',
   cta2Text:'Explore Vastu Store',cta2Link:'/vastu-store',
-  servicesButtonText:'View All 100+ Services',
+  servicesButtonText:'View All 25+ Services',
   trustBadges:[{label:'IVAF Awarded',order:0},{label:'73,000+ Consultations',order:1},{label:'New Delhi Recognized',order:2}],
-  stats:[{value:'73,000+',label:'Happy Clients',order:0},{value:'15+',label:'Years Experience',order:1},{value:'100+',label:'Services',order:2},{value:'50+',label:'Cities Served',order:3}],
+  stats:[{value:'73,000+',label:'Happy Clients',order:0},{value:'15+',label:'Years Experience',order:1},{value:'25+',label:'Services',order:2},{value:'50+',label:'Cities Served',order:3}],
 };
 const BG_DEFAULTS={bg_animations_enabled:true,bg_particles_enabled:true,bg_gold_intensity:0.6,bg_animation_speed:1.0,bg_particle_opacity:0.4,bg_star_density:80};
 
@@ -37,7 +38,11 @@ export default function WebsiteEditorPage() {
       homepageSettingsAPI.get().catch(()=>({data:{data:DEFAULTS}})),
       configAPI.get().catch(()=>({data:{data:BG_DEFAULTS}})),
     ]).then(([sr,cr])=>{
-      setS({...DEFAULTS,...(sr.data.data||{})});
+      const fetched = {...DEFAULTS,...(sr.data.data||{})};
+      // Ensure 25+ whenever syncing from server
+      if (fetched.servicesButtonText) fetched.servicesButtonText = fetched.servicesButtonText.replace('100+','25+');
+      if (fetched.stats) fetched.stats = fetched.stats.map((st:any)=>st.label==='Services'||st.label==='Services Offered'?{...st,value:'25+'}:st);
+      setS(fetched);
       setBg({...BG_DEFAULTS,...(cr.data.data||{})});
     }).finally(()=>setLoading(false));
   },[]);
@@ -55,12 +60,12 @@ export default function WebsiteEditorPage() {
   const removeBadge=(i:number)=>upd('trustBadges',(s.trustBadges||[]).filter((_:any,idx:number)=>idx!==i));
   const moveBadge=(i:number,d:-1|1)=>{const arr=[...(s.trustBadges||[])];const j=i+d;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];upd('trustBadges',arr.map((b:any,idx:number)=>({...b,order:idx})));};
 
-  const addStat=()=>{if(!newStat.value||!newStat.label)return;upd('stats',[...(s.stats||[]),{...newStat,order:(s.stats||[]).length}]);setNewStat({value:'',label:''}); };
+  const addStat=()=>{if(!newStat.value||!newStat.label)return;upd('stats',[...(s.stats||[]),{...newStat,order:(s.stats||[]).length}]);setNewStat({value:'',label:''});};
   const removeStat=(i:number)=>upd('stats',(s.stats||[]).filter((_:any,idx:number)=>idx!==i));
   const editStat=(i:number,k:string,v:string)=>{const a=[...(s.stats||[])];a[i]={...a[i],[k]:v};upd('stats',a);};
   const moveStat=(i:number,d:-1|1)=>{const a=[...(s.stats||[])];const j=i+d;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];upd('stats',a.map((x:any,idx:number)=>({...x,order:idx})));};
 
-  if(loading)return(<div className="flex items-center justify-center h-64"><div className="text-center"><div className="text-4xl animate-spin mb-3">🕉️</div><p className="text-gray-400 text-sm">Loading website settings…</p></div></div>);
+  if(loading)return(<div className="flex items-center justify-center h-64"><div className="text-center"><div className="text-4xl animate-spin mb-3">🕉️</div><p className="text-gray-400 text-sm">Loading…</p></div></div>);
 
   const tabs=[{id:'brand',label:'Brand & Contact',icon:Globe},{id:'hero',label:'Hero Section',icon:Sparkles},{id:'stats',label:'Stats & Badges',icon:BarChart2},{id:'background',label:'Background FX',icon:null}];
 
@@ -98,7 +103,7 @@ export default function WebsiteEditorPage() {
       {tab==='hero'&&(<div className="space-y-5">
         <div className="bg-white rounded-2xl border border-orange-100 p-6 shadow-sm space-y-4">
           <h2 className="font-semibold text-gray-800">Hero Heading</h2>
-          <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Main Heading <span className="text-gray-400">(comma splits into two lines — after comma = orange gradient)</span></label><textarea value={s.heroHeading||''} onChange={e=>upd('heroHeading',e.target.value)} rows={2} placeholder="Transform Your Space, Transform Your Life" className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm resize-none focus:outline-none focus:border-primary"/></div>
+          <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Main Heading</label><textarea value={s.heroHeading||''} onChange={e=>upd('heroHeading',e.target.value)} rows={2} placeholder="Transform Your Space, Transform Your Life" className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm resize-none focus:outline-none focus:border-primary"/></div>
           <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Subheading</label><textarea value={s.heroSubheading||''} onChange={e=>upd('heroSubheading',e.target.value)} rows={2} className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm resize-none focus:outline-none focus:border-primary"/></div>
         </div>
         <div className="bg-white rounded-2xl border border-orange-100 p-6 shadow-sm space-y-4">
@@ -109,7 +114,7 @@ export default function WebsiteEditorPage() {
             <F label="Button 2 Text (outline)" value={s.cta2Text} onChange={(v:string)=>upd('cta2Text',v)} placeholder="Explore Vastu Store"/>
             <F label="Button 2 Link" value={s.cta2Link} onChange={(v:string)=>upd('cta2Link',v)} placeholder="/vastu-store"/>
           </div>
-          <div className="pt-2 border-t border-orange-50"><F label="Services Button Text" value={s.servicesButtonText} onChange={(v:string)=>upd('servicesButtonText',v)} placeholder="View All 100+ Services"/></div>
+          <div className="pt-2 border-t border-orange-50"><F label="Services Button Text" value={s.servicesButtonText} onChange={(v:string)=>upd('servicesButtonText',v)} placeholder="View All 25+ Services"/></div>
         </div>
         <div className="bg-gray-900 rounded-2xl p-5 text-white">
           <p className="text-xs text-gray-400 mb-3 font-semibold uppercase tracking-wide">Live Preview</p>
@@ -121,7 +126,7 @@ export default function WebsiteEditorPage() {
 
       {tab==='stats'&&(<div className="space-y-5">
         <div className="bg-white rounded-2xl border border-orange-100 p-6 shadow-sm">
-          <h2 className="font-semibold text-gray-800 mb-4">Trust Badges <span className="text-xs font-normal text-gray-400">(below hero heading)</span></h2>
+          <h2 className="font-semibold text-gray-800 mb-4">Trust Badges</h2>
           <div className="space-y-2 mb-4">
             {(s.trustBadges||[]).map((b:any,i:number)=>(<div key={i} className="flex items-center gap-2">
               <span className="flex-1 bg-orange-50 px-3 py-2.5 rounded-xl text-sm text-gray-700 border border-orange-100">{b.label}</span>
@@ -148,7 +153,7 @@ export default function WebsiteEditorPage() {
             </div>))}
           </div>
           <div className="flex gap-2">
-            <input value={newStat.value} onChange={e=>setNewStat(p=>({...p,value:e.target.value}))} placeholder="73,000+" className="w-28 px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-primary"/>
+            <input value={newStat.value} onChange={e=>setNewStat(p=>({...p,value:e.target.value}))} placeholder="25+" className="w-28 px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-primary"/>
             <input value={newStat.label} onChange={e=>setNewStat(p=>({...p,label:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&addStat()} placeholder="Label" className="flex-1 px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-primary"/>
             <button onClick={addStat} className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-medium"><Plus size={14}/></button>
           </div>
@@ -162,7 +167,6 @@ export default function WebsiteEditorPage() {
       {tab==='background'&&(<div className="space-y-5">
         <div className="bg-white rounded-2xl border border-orange-100 p-6 shadow-sm space-y-5">
           <h2 className="font-semibold text-gray-800">Background Animation Settings</h2>
-          <p className="text-xs text-gray-400">Controls the luxury gold particles and mandala animations on the homepage.</p>
           {[{k:'bg_animations_enabled',l:'Enable All Animations',d:'Master switch for all background effects'},{k:'bg_particles_enabled',l:'Enable Gold Particles',d:'Floating gold dust particles overlay'}].map(({k,l,d})=>(<div key={k} className="flex items-center justify-between p-4 bg-orange-50 rounded-xl border border-orange-100">
             <div><p className="font-medium text-sm text-gray-800">{l}</p><p className="text-xs text-gray-400">{d}</p></div>
             <label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={bg[k]} onChange={e=>setBg((p:any)=>({...p,[k]:e.target.checked}))} className="sr-only peer"/><div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-primary after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5"></div></label>

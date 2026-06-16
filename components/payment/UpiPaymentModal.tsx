@@ -1,203 +1,185 @@
-"use client";
+'use client';
 /**
  * components/payment/UpiPaymentModal.tsx
- * ─────────────────────────────────────────────────────────────────
- * Full UPI payment modal for VastuArya.com
- * Handles: QR display, UPI ID copy, screenshot upload, "I Have Paid" flow
- * Used by: all services, products, consultations
  *
- * Props:
- *   isOpen        — controls modal visibility
- *   onClose       — called when user dismisses modal
- *   amount        — payment amount in ₹ (rupees, not paise)
- *   itemName      — service/product name shown in modal
- *   itemId        — DB ID of the item being paid for
- *   itemType      — "service" | "product" | "consultation" | "booking"
- *   bookingId     — optional booking/order ID (if already created)
- *   onPaymentSubmitted — called after "I Have Paid" is successfully processed
- * ─────────────────────────────────────────────────────────────────
+ * Manual UPI payment modal with screenshot upload.
+ * NO Razorpay. NO automatic verification. NO dynamic QR generation.
+ *
+ * Flow:
+ *  1. Show QR + UPI ID + amount
+ *  2. User pays in their UPI app
+ *  3. User uploads screenshot + fills details
+ *  4. POST /api/upi-payment  → status: PENDING_VERIFICATION
+ *  5. Show confirmation screen with reference ID
  */
 
-import React, { useState, useRef, useCallback } from "react";
-import Image from "next/image";
-import { PAYMENT_CONFIG, getActiveUpi, formatAmount } from "@/config/payment.config";
+import React, { useState, useRef, useCallback } from 'react';
+import Image from 'next/image';
+import { Copy, CheckCircle, X, Upload, Loader2, QrCode } from 'lucide-react';
+import toast from 'react-hot-toast';
 
-interface UpiPaymentModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  amount: number;
-  itemName: string;
-  itemId: string;
-  itemType: "service" | "product" | "consultation" | "booking";
-  bookingId?: string;
-  onPaymentSubmitted?: (referenceId: string) => void;
+// ── UPI Configuration ─────────────────────────────────────────────
+const UPI_PRIMARY   = { id: 'vastuarya@ybl',      label: 'Primary UPI',   qr: '/images/qr/upi-secondary-vastuarya.jpeg' };
+const UPI_SECONDARY = { id: 'aryavartguna@ybl',   label: 'Alternative UPI', qr: '/images/qr/upi-primary-aryavartguna.jpeg' };
+
+export interface UpiPaymentModalProps {
+  isOpen:      boolean;
+  onClose:     () => void;
+  amount:      number;          // in ₹ (rupees, not paise)
+  itemName:    string;
+  itemId:      string;
+  itemType:    'service' | 'product' | 'consultation';
+  requiresAddress?: boolean;   // true for products
+  onSuccess?:  (referenceId: string) => void;
 }
 
-type Step = "qr" | "upload" | "submitted";
+type Step = 'payment' | 'upload' | 'done';
 
 export default function UpiPaymentModal({
-  isOpen,
-  onClose,
-  amount,
-  itemName,
-  itemId,
-  itemType,
-  bookingId,
-  onPaymentSubmitted,
+  isOpen, onClose, amount, itemName, itemId, itemType, requiresAddress = false, onSuccess,
 }: UpiPaymentModalProps) {
-  const activeUpi = getActiveUpi();
-  const [step, setStep] = useState<Step>("qr");
-  const [copied, setCopied] = useState(false);
-  const [screenshot, setScreenshot] = useState<File | null>(null);
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
-  const [uploaderName, setUploaderName] = useState("");
-  const [uploaderPhone, setUploaderPhone] = useState("");
-  const [transactionId, setTransactionId] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [referenceId, setReferenceId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [step,           setStep]           = useState<Step>('payment');
+  const [activeUpi,      setActiveUpi]      = useState<'primary' | 'secondary'>('primary');
+  const [copied,         setCopied]         = useState(false);
+  const [screenshot,     setScreenshot]     = useState<File | null>(null);
+  const [screenshotPrev, setScreenshotPrev] = useState<string | null>(null);
+  const [name,           setName]           = useState('');
+  const [phone,          setPhone]          = useState('');
+  const [email,          setEmail]          = useState('');
+  const [address,        setAddress]        = useState('');
+  const [txnId,          setTxnId]          = useState('');
+  const [submitting,     setSubmitting]     = useState(false);
+  const [referenceId,    setReferenceId]    = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  // ── Copy UPI ID ──────────────────────────────────────────────
-  const handleCopyUpiId = useCallback(async () => {
+  const upi = activeUpi === 'primary' ? UPI_PRIMARY : UPI_SECONDARY;
+
+  const resetAndClose = useCallback(() => {
+    setStep('payment'); setActiveUpi('primary'); setCopied(false);
+    setScreenshot(null); setScreenshotPrev(null);
+    setName(''); setPhone(''); setEmail(''); setAddress(''); setTxnId('');
+    setSubmitting(false); setReferenceId('');
+    onClose();
+  }, [onClose]);
+
+  const copyUpiId = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(activeUpi.id);
+      await navigator.clipboard.writeText(upi.id);
       setCopied(true);
+      toast.success('UPI ID copied!');
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // Fallback for older browsers
-      const el = document.createElement("textarea");
-      el.value = activeUpi.id;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      toast.error('Could not copy — please copy manually');
     }
-  }, [activeUpi.id]);
+  }, [upi.id]);
 
-  // ── File Selection ───────────────────────────────────────────
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setSubmitError("Please upload an image file (JPG, PNG, etc.).");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setSubmitError("File size must be under 5MB.");
-      return;
-    }
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) { toast.error('Only JPG, PNG or WEBP allowed'); return; }
+    if (file.size > 10 * 1024 * 1024)  { toast.error('File must be under 10 MB'); return; }
     setScreenshot(file);
-    setSubmitError(null);
     const reader = new FileReader();
-    reader.onload = (ev) => setScreenshotPreview(ev.target?.result as string);
+    reader.onload = ev => setScreenshotPrev(ev.target?.result as string);
     reader.readAsDataURL(file);
   }, []);
 
-  // ── Submit "I Have Paid" ─────────────────────────────────────
-  const handleIHavePaid = useCallback(async () => {
-    if (!screenshot) {
-      setSubmitError("Please upload your payment screenshot.");
-      return;
-    }
-    setIsSubmitting(true);
-    setSubmitError(null);
+  const handleSubmit = useCallback(async () => {
+    if (!screenshot)      { toast.error('Please upload your payment screenshot'); return; }
+    if (!name.trim())     { toast.error('Please enter your name'); return; }
+    if (!/^[6-9]\d{9}$/.test(phone)) { toast.error('Enter valid 10-digit mobile number'); return; }
+    if (requiresAddress && !address.trim()) { toast.error('Please enter delivery address'); return; }
 
+    setSubmitting(true);
     try {
-      const formData = new FormData();
-      formData.append("screenshot", screenshot);
-      formData.append("amount", String(amount));
-      formData.append("itemId", itemId);
-      formData.append("itemType", itemType);
-      formData.append("upiId", activeUpi.id);
-      formData.append("transactionId", transactionId.trim());
-      formData.append("uploaderName", uploaderName.trim());
-      formData.append("uploaderPhone", uploaderPhone.trim());
-      if (bookingId) formData.append("bookingId", bookingId);
+      const fd = new FormData();
+      fd.append('screenshot',  screenshot);
+      fd.append('amount',      String(amount));
+      fd.append('itemId',      itemId);
+      fd.append('itemType',    itemType);
+      fd.append('itemName',    itemName);
+      fd.append('upiId',       upi.id);
+      fd.append('txnId',       txnId.trim());
+      fd.append('name',        name.trim());
+      fd.append('phone',       phone.trim());
+      fd.append('email',       email.trim());
+      if (requiresAddress) fd.append('address', address.trim());
 
-      const res = await fetch("/api/payment/upi-pending", {
-        method: "POST",
-        body: formData,
-      });
-
+      const res  = await fetch('/api/upi-payment', { method: 'POST', body: fd });
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error ?? "Submission failed. Please try again.");
-      }
+      if (!res.ok) throw new Error(data.error || 'Submission failed');
 
       setReferenceId(data.referenceId);
-      setStep("submitted");
-      onPaymentSubmitted?.(data.referenceId);
+      setStep('done');
+      onSuccess?.(data.referenceId);
     } catch (err: any) {
-      setSubmitError(err.message ?? "An error occurred. Please try again.");
+      toast.error(err.message || 'Failed to submit. Please try again.');
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
-  }, [screenshot, amount, itemId, itemType, activeUpi.id, transactionId, uploaderName, uploaderPhone, bookingId, onPaymentSubmitted]);
-
-  // ── Reset on close ───────────────────────────────────────────
-  const handleClose = useCallback(() => {
-    setStep("qr");
-    setScreenshot(null);
-    setScreenshotPreview(null);
-    setUploaderName("");
-    setUploaderPhone("");
-    setTransactionId("");
-    setSubmitError(null);
-    setReferenceId(null);
-    setCopied(false);
-    onClose();
-  }, [onClose]);
+  }, [screenshot, name, phone, email, address, txnId, amount, itemId, itemType, itemName, upi.id, requiresAddress, onSuccess]);
 
   if (!isOpen) return null;
 
   return (
-    // Backdrop
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="UPI Payment"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4"
+      onClick={e => { if (e.target === e.currentTarget) resetAndClose(); }}
+      role="dialog" aria-modal="true"
     >
-      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[95vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[96vh] overflow-y-auto">
+
+        {/* ── Header ── */}
+        <div className="sticky top-0 z-10 bg-white rounded-t-3xl border-b border-orange-100 flex items-center justify-between px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Pay via UPI</h2>
-            <p className="text-sm text-gray-500 truncate max-w-[220px]">{itemName}</p>
+            <h2 className="font-display font-bold text-gray-900 text-base">Pay via UPI</h2>
+            <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[220px]">{itemName}</p>
           </div>
-          <button
-            onClick={handleClose}
-            className="text-gray-400 hover:text-gray-700 transition-colors p-1"
-            aria-label="Close"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <button onClick={resetAndClose} className="p-1.5 rounded-xl hover:bg-gray-100 transition-colors" aria-label="Close">
+            <X size={18} className="text-gray-500" />
           </button>
         </div>
 
-        {/* ── STEP 1: QR + Amount ──────────────────────────────── */}
-        {step === "qr" && (
+        {/* ══ STEP 1: Payment details ══════════════════════════════════ */}
+        {step === 'payment' && (
           <div className="px-5 py-4 space-y-4">
-            {/* Amount Badge */}
+            {/* Amount */}
             <div className="text-center">
-              <span className="inline-block bg-orange-50 border border-orange-200 text-orange-800 text-2xl font-bold px-6 py-2 rounded-xl">
-                {formatAmount(amount)}
-              </span>
-              <p className="text-xs text-gray-500 mt-1">Pay this exact amount</p>
+              <div className="inline-flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-2xl px-6 py-3">
+                <span className="text-xs text-orange-600 font-medium">Amount to Pay</span>
+                <span className="font-display font-bold text-2xl text-orange-700">₹{amount.toLocaleString('en-IN')}</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">Pay this exact amount</p>
             </div>
 
-            {/* QR Image */}
+            {/* UPI toggle */}
+            <div className="flex gap-2">
+              {(['primary', 'secondary'] as const).map(key => {
+                const u = key === 'primary' ? UPI_PRIMARY : UPI_SECONDARY;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setActiveUpi(key)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                      activeUpi === key
+                        ? 'bg-orange-500 text-white border-orange-500'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300'
+                    }`}
+                  >
+                    {u.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* QR Code */}
             <div className="flex justify-center">
-              <div className="relative w-56 h-56 rounded-xl overflow-hidden border-2 border-gray-200 shadow-sm">
+              <div className="relative w-52 h-52 rounded-2xl overflow-hidden border-2 border-orange-200 shadow-sm bg-gray-50">
                 <Image
-                  src={activeUpi.qrImagePath}
-                  alt={`UPI QR Code — ${activeUpi.id}`}
+                  src={upi.qr}
+                  alt={`QR Code for ${upi.id}`}
                   fill
                   className="object-contain"
                   priority
@@ -205,217 +187,184 @@ export default function UpiPaymentModal({
               </div>
             </div>
 
-            {/* UPI ID Copy */}
-            <div className="bg-gray-50 rounded-xl p-3 flex items-center justify-between gap-2">
+            {/* UPI ID copy */}
+            <div className="bg-gray-50 rounded-2xl p-3.5 flex items-center justify-between gap-3 border border-gray-100">
               <div>
-                <p className="text-xs text-gray-500">UPI ID</p>
-                <p className="text-sm font-mono font-semibold text-gray-800">{activeUpi.id}</p>
+                <p className="text-xs text-gray-400 mb-0.5">UPI ID</p>
+                <p className="font-mono font-bold text-gray-800 text-sm">{upi.id}</p>
               </div>
               <button
-                onClick={handleCopyUpiId}
-                className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium transition-all ${
-                  copied
-                    ? "bg-green-100 text-green-700"
-                    : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                onClick={copyUpiId}
+                className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl font-semibold transition-all flex-shrink-0 ${
+                  copied ? 'bg-green-100 text-green-700' : 'bg-white border border-gray-200 text-gray-600 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700'
                 }`}
               >
-                {copied ? (
-                  <>
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Copy
-                  </>
-                )}
+                {copied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
 
             {/* Instructions */}
-            <div className="bg-blue-50 rounded-xl p-3">
-              <p className="text-xs font-semibold text-blue-800 mb-1.5">How to pay:</p>
-              <ol className="space-y-1">
-                {PAYMENT_CONFIG.upiInstructions.map((instruction, i) => (
+            <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+              <p className="text-xs font-bold text-blue-800 mb-2.5">How to pay:</p>
+              <ol className="space-y-1.5">
+                {[
+                  'Open PhonePe, Google Pay, Paytm or any UPI app.',
+                  `Scan QR code or send to ${upi.id}`,
+                  `Pay exact amount: ₹${amount.toLocaleString('en-IN')}`,
+                  'Take a screenshot of the success screen.',
+                  'Come back here and click the button below.',
+                ].map((step, i) => (
                   <li key={i} className="flex gap-2 text-xs text-blue-700">
-                    <span className="font-bold flex-shrink-0">{i + 1}.</span>
-                    <span>{instruction}</span>
+                    <span className="font-bold flex-shrink-0 w-4">{i + 1}.</span>
+                    <span>{step}</span>
                   </li>
                 ))}
               </ol>
             </div>
 
-            {/* Supported apps */}
             <p className="text-center text-xs text-gray-400">
-              Works with PhonePe · Google Pay · Paytm · BHIM · All UPI apps
+              Supported: PhonePe · Google Pay · Paytm · BHIM · All UPI apps
             </p>
 
-            {/* CTA */}
             <button
-              onClick={() => setStep("upload")}
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 rounded-xl transition-colors"
+              onClick={() => setStep('upload')}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3.5 rounded-2xl transition-colors text-sm"
             >
-              I Have Paid — Upload Screenshot
+              I Have Paid — Upload Screenshot →
             </button>
           </div>
         )}
 
-        {/* ── STEP 2: Screenshot Upload ────────────────────────── */}
-        {step === "upload" && (
+        {/* ══ STEP 2: Upload + details ══════════════════════════════════ */}
+        {step === 'upload' && (
           <div className="px-5 py-4 space-y-4">
             <div className="text-center">
-              <p className="text-sm font-medium text-gray-700">
-                Upload your payment screenshot
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Amount paid: <strong>{formatAmount(amount)}</strong> to <strong>{activeUpi.id}</strong>
+              <p className="font-semibold text-gray-800 text-sm">Upload Payment Screenshot</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Paid <strong>₹{amount.toLocaleString('en-IN')}</strong> to <strong>{upi.id}</strong>
               </p>
             </div>
 
-            {/* Screenshot Upload Zone */}
+            {/* Screenshot upload */}
             <div
-              className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center cursor-pointer hover:border-orange-400 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-orange-300 rounded-2xl p-4 cursor-pointer hover:border-orange-400 hover:bg-orange-50/30 transition-all text-center"
+              onClick={() => fileRef.current?.click()}
             >
-              {screenshotPreview ? (
-                <div className="relative w-full h-48 rounded-lg overflow-hidden">
-                  <Image src={screenshotPreview} alt="Payment screenshot" fill className="object-contain" />
+              {screenshotPrev ? (
+                <div className="relative w-full h-44 rounded-xl overflow-hidden">
+                  <Image src={screenshotPrev} alt="Payment screenshot" fill className="object-contain" />
                 </div>
               ) : (
-                <div className="py-4">
-                  <svg className="w-10 h-10 text-gray-300 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <p className="text-sm text-gray-500">Tap to upload screenshot</p>
-                  <p className="text-xs text-gray-400 mt-0.5">JPG, PNG · Max 5MB</p>
+                <div className="py-6">
+                  <Upload size={28} className="text-orange-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500 font-medium">Tap to upload screenshot</p>
+                  <p className="text-xs text-gray-400 mt-1">JPG · PNG · WEBP · Max 10 MB</p>
                 </div>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="hidden"
-              />
+              <input ref={fileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={handleFile} className="hidden" />
             </div>
-
-            {screenshotPreview && (
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="text-xs text-orange-600 underline w-full text-center"
-              >
+            {screenshotPrev && (
+              <button onClick={() => fileRef.current?.click()} className="text-xs text-orange-600 underline w-full text-center">
                 Change screenshot
               </button>
             )}
 
-            {/* Optional transaction ID */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Transaction ID (optional but recommended)
-              </label>
-              <input
-                type="text"
-                value={transactionId}
-                onChange={(e) => setTransactionId(e.target.value)}
-                placeholder="e.g. 412345678901"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
-            </div>
-
-            {/* Name */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Your Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={uploaderName}
-                onChange={(e) => setUploaderName(e.target.value)}
-                placeholder="Full name"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Mobile Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="tel"
-                value={uploaderPhone}
-                onChange={(e) => setUploaderPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                placeholder="10-digit mobile number"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
-            </div>
-
-            {submitError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
-                {submitError}
+            {/* Customer details */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Full Name <span className="text-red-500">*</span></label>
+                <input
+                  type="text" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="Your full name"
+                  className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-orange-500"
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Mobile Number <span className="text-red-500">*</span></label>
+                <input
+                  type="tel" value={phone}
+                  onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10-digit mobile number"
+                  className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Email (optional)</label>
+                <input
+                  type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-orange-500"
+                />
+              </div>
+              {requiresAddress && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Delivery Address <span className="text-red-500">*</span></label>
+                  <textarea
+                    value={address} onChange={e => setAddress(e.target.value)}
+                    placeholder="House no, Street, City, PIN code"
+                    rows={3}
+                    className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 resize-none"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID (optional)</label>
+                <input
+                  type="text" value={txnId} onChange={e => setTxnId(e.target.value)}
+                  placeholder="UPI transaction reference number"
+                  className="w-full px-3 py-2.5 border border-orange-200 rounded-xl text-sm focus:outline-none focus:border-orange-500"
+                />
+              </div>
+            </div>
 
             <div className="flex gap-3">
               <button
-                onClick={() => setStep("qr")}
-                className="flex-1 border border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm"
+                onClick={() => setStep('payment')}
+                className="flex-1 border border-gray-200 text-gray-600 font-semibold py-3 rounded-xl hover:bg-gray-50 transition-colors text-sm"
               >
                 ← Back
               </button>
               <button
-                onClick={handleIHavePaid}
-                disabled={isSubmitting || !screenshot || !uploaderName.trim() || !uploaderPhone.trim()}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-xl transition-colors text-sm"
+                onClick={handleSubmit}
+                disabled={submitting || !screenshot}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
               >
-                {isSubmitting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                    </svg>
-                    Submitting...
-                  </span>
+                {submitting ? (
+                  <><Loader2 size={16} className="animate-spin" /> Submitting…</>
                 ) : (
-                  "I Have Paid ✓"
+                  'Submit Order ✓'
                 )}
               </button>
             </div>
           </div>
         )}
 
-        {/* ── STEP 3: Submitted ────────────────────────────────── */}
-        {step === "submitted" && (
+        {/* ══ STEP 3: Success ══════════════════════════════════════════ */}
+        {step === 'done' && (
           <div className="px-5 py-8 text-center space-y-4">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-              <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <CheckCircle size={32} className="text-green-600" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900">Payment Submitted!</h3>
-            <p className="text-sm text-gray-600">
-              Your payment screenshot has been received. Our team will verify it within{" "}
+            <h3 className="font-display font-bold text-gray-900 text-lg">Payment Submitted!</h3>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Your payment screenshot has been received. Our team will verify it within{' '}
               <strong>2–4 hours</strong> and activate your {itemType}.
             </p>
             {referenceId && (
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-xs text-gray-500">Reference ID</p>
-                <p className="font-mono text-sm font-semibold text-gray-800 mt-0.5">{referenceId}</p>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <p className="text-xs text-gray-400 mb-1">Reference ID</p>
+                <p className="font-mono font-bold text-gray-800">{referenceId}</p>
                 <p className="text-xs text-gray-400 mt-1">Save this for your records</p>
               </div>
             )}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-800">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-800">
               <strong>Status: Pending Verification</strong><br />
-              You will receive a confirmation once admin verifies your payment.
+              You will be contacted once our team verifies your payment.
             </div>
             <button
-              onClick={handleClose}
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 rounded-xl transition-colors"
+              onClick={resetAndClose}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3.5 rounded-2xl transition-colors"
             >
               Done
             </button>

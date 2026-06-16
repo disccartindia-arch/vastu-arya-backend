@@ -1,13 +1,12 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from 'next';
 import dynamic from 'next/dynamic';
+import Script from 'next/script';
 import './globals.css';
 import { Toaster } from 'react-hot-toast';
 import { vastuAryaJsonLd } from '@/lib/seo';
 import Providers from '../components/Providers';
 
-// FIX: ssr:false — LuxuryBackground uses Math.random() + canvas which causes
-// hydration mismatch (server HTML ≠ client render). Skip SSR entirely.
 const LuxuryBackground = dynamic(
   () => import('../components/ui/LuxuryBackground'),
   { ssr: false }
@@ -52,22 +51,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // suppressHydrationWarning: handles any remaining client/server differences
-    // e.g. lang switcher, user state, timestamps
     <html lang="en" suppressHydrationWarning>
       <head>
-      <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-H2BMEXCRQT"></script>
-<script
-  dangerouslySetInnerHTML={{
-    __html: `
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-H2BMEXCRQT');
-    `,
-  }}
-/>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <script
@@ -76,6 +61,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-body bg-cream" suppressHydrationWarning>
+        {/* Google Analytics */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-H2BMEXCRQT"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-H2BMEXCRQT');
+          `}
+        </Script>
+
         <LuxuryBackground />
         <Providers>
           <div className="relative z-10">{children}</div>
