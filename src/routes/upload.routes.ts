@@ -39,7 +39,16 @@ export const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowed = /jpeg|jpg|png|webp|gif|mp4|mov|webm/;
     const ok = allowed.test(file.mimetype);
-    cb(ok ? null : new Error('Unsupported file type.'), ok);
+    // FIXED (Render build failure, TS2345): multer's FileFilterCallback type is
+    // an overloaded signature — (error: Error) => void, OR (error: null, acceptFile: boolean) => void.
+    // A single `cb(ok ? null : new Error(...), ok)` call doesn't cleanly match either
+    // overload since the first argument's inferred type is the union `Error | null`.
+    // Splitting into two calls, one per branch, matches each overload exactly.
+    if (ok) {
+      cb(null, true);
+    } else {
+      cb(new Error('Unsupported file type.'));
+    }
   },
 });
 
