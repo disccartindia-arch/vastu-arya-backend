@@ -1,80 +1,96 @@
 /**
- * payment.config.ts
+ * config/payment.config.ts
  * ─────────────────────────────────────────────────────────────────
- * SINGLE SOURCE OF TRUTH for all payment configuration.
- * VastuArya.com
+ * Single source of truth for payment configuration.
  *
- * DO NOT hardcode UPI IDs, QR paths, or payment settings anywhere else.
- * All services, products, and checkout pages must import from here.
- * ─────────────────────────────────────────────────────────────────
+ * CHANGED this round: the old UpiPaymentModal.tsx hardcoded its own
+ * UPI_PRIMARY / UPI_SECONDARY constants directly in the component —
+ * and got it backwards: it labelled 'vastuarya@ybl' as PRIMARY and
+ * 'aryavartguna@ybl' as SECONDARY, the opposite of what the backend's
+ * PaymentSettings model actually defines (primaryUPI: 'aryavartguna@ybl',
+ * fallbackUPI: 'vastuarya@ybl'). This file now fetches the live values
+ * from the backend (GET /api/payment/settings) so there is exactly one
+ * place those IDs are defined — the database, via PaymentSettings.ts —
+ * and the hardcoded constants below only exist as a last-resort fallback
+ * if that request fails (e.g. backend cold-starting on Render free tier).
+ *
+ * Endpoint paths are also centralised here so nothing else in the
+ * frontend hardcodes a route string — verify all backend paths in one
+ * place, here, against src/server.ts / src/routes/*.ts in the backend
+ * package.
  */
 
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'https://vastu-arya-backend-1.onrender.com/api';
+
+// ── Route paths — must match backend exactly ──────────────────────
+// payment.routes.ts:       GET/PUT /settings, POST /create-order, POST /verify
+// upiPayment.routes.ts:    POST /submit, GET /status/:referenceId
+// (both mounted under /api/payment and /api/payment/upi respectively)
+export const PAYMENT_ROUTES = {
+  createOrder:   `${API_BASE_URL}/payment/create-order`,
+  verify:        `${API_BASE_URL}/payment/verify`,
+  settings:      `${API_BASE_URL}/payment/settings`,
+  upiSubmit:     `${API_BASE_URL}/payment/upi/submit`,
+  upiStatus:     (referenceId: string) => `${API_BASE_URL}/payment/upi/status/${referenceId}`,
+};
+
+// ── Fallback UPI config — only used if /payment/settings fetch fails ──
+// Matches the corrected defaults in backend src/models/PaymentSettings.ts.
+export const UPI_FALLBACK = {
+  primary:   { id: 'aryavartguna@ybl', label: 'Primary UPI',     qr: '/images/qr/upi-primary-aryavartguna.jpeg' },
+  secondary: { id: 'vastuarya@ybl',    label: 'Alternative UPI', qr: '/images/qr/upi-secondary-vastuarya.jpeg' },
+  payeeName: 'Vastu Arya',
+};
+
+export interface PaymentSettingsResponse {
+  primaryUPI: string;
+  fallbackUPI: string;
+  payeeName: string;
+  upiEnabled: boolean;
+  fallbackEnabled: boolean;
+  razorpayEnabled: boolean;
+  codEnabled: boolean;
+}
+
+/**
+ * Fetches live UPI configuration from the backend. Falls back to
+ * UPI_FALLBACK (with a console.warn) if the request fails for any
+ * reason, so the payment modal never breaks just because this one
+ * settings call had a hiccup.
+ */
+export async function fetchPaymentSettings(): Promise<{
+  primary: { id: string; label: string; qr: string };
+  secondary: { id: string; label: string; qr: string };
+  payeeName: string;
+}> {
+  try {
+    const res = await fetch(PAYMENT_ROUTES.settings, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`Settings fetch failed: ${res.status}`);
+    const json = await res.json();
+    const data: PaymentSettingsResponse = json?.data;
+    if (!data?.primaryUPI || !data?.fallbackUPI) throw new Error('Malformed settings response');
+
+    return {
+      primary:   { id: data.primaryUPI,  label: 'Primary UPI',     qr: UPI_FALLBACK.primary.qr },
+      secondary: { id: data.fallbackUPI, label: 'Alternative UPI', qr: UPI_FALLBACK.secondary.qr },
+      payeeName: data.payeeName || UPI_FALLBACK.payeeName,
+    };
+  } catch (err) {
+    console.warn('[payment.config] Falling back to hardcoded UPI config:', (err as Error).message);
+    return {
+      primary: UPI_FALLBACK.primary,
+      secondary: UPI_FALLBACK.secondary,
+      payeeName: UPI_FALLBACK.payeeName,
+    };
+  }
+}
+
+/** Formats a rupee amount with the ₹ symbol and Indian digit grouping, e.g. 1999 -> "₹1,999". */
+export function formatAmount(amount: number): string {
+  return `₹${new Intl.NumberFormat('en-IN').format(Math.round(amount))}`;
+}
+
 export const PAYMENT_CONFIG = {
-  // ── UPI Accounts ──────────────────────────────────────────────
-  upi: {
-    primary: {
-      id: "aryavartguna@ybl",
-      label: "VastuArya (Primary)",
-      bank: "State Bank of India",
-      accountLast4: "3356",
-      // Path relative to /public — served by Next.js as static asset
-      qrImagePath: "/images/qr/upi-primary-aryavartguna.jpeg",
-    },
-    secondary: {
-      id: "vastuarya@ybl",
-      label: "VastuArya (Secondary)",
-      bank: "IDBI Bank",
-      accountLast4: "9553",
-      qrImagePath: "/images/qr/upi-secondary-vastuarya.jpeg",
-    },
-  },
-
-  // ── Active UPI (used in payment modal) ────────────────────────
-  // Change this to "secondary" to switch which QR/ID is shown by default
-  activeUpi: "primary" as "primary" | "secondary",
-
-  // ── Razorpay ──────────────────────────────────────────────────
-  razorpay: {
-    // Key is read from env at runtime — do not hardcode here
-    keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? "",
-    currency: "INR",
-    brandName: "VastuArya",
-    brandColor: "#B8860B",
-  },
-
-  // ── Service Count ─────────────────────────────────────────────
-  serviceCount: "25+",
-
-  // ── Payment Instructions (shown in UPI modal) ─────────────────
-  upiInstructions: [
-    "Scan the QR code using any UPI app (PhonePe, GPay, Paytm, BHIM).",
-    "Enter the exact amount shown.",
-    "Complete the payment and take a screenshot.",
-    'Upload the screenshot and click "I Have Paid".',
-  ],
-
-  // ── Status Labels ─────────────────────────────────────────────
-  paymentStatus: {
-    UPI_PENDING: "UPI_PENDING",   // User clicked "I Have Paid" — awaiting admin verification
-    PAID: "PAID",                  // Admin verified — order/booking activated
-    FAILED: "FAILED",
-    PENDING: "PENDING",
-    RAZORPAY_PENDING: "RAZORPAY_PENDING",
-    RAZORPAY_PAID: "RAZORPAY_PAID",
-  },
-} as const;
-
-// ── Helper: get active UPI account ────────────────────────────────
-export function getActiveUpi() {
-  return PAYMENT_CONFIG.upi[PAYMENT_CONFIG.activeUpi];
-}
-
-// ── Helper: format amount for display ─────────────────────────────
-export function formatAmount(amountInRupees: number): string {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amountInRupees);
-}
+  serviceCount: 25,
+};
