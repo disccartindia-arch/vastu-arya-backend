@@ -11,6 +11,11 @@ export interface IBooking extends Document {
   formData?: Record<string, any>;
   paymentId?: string;
   razorpayOrderId?: string;
+  // NEW — additive, defaults to 'razorpay' so every existing document is
+  // unaffected. Lets the admin dashboard / reports distinguish Razorpay
+  // payments from UPI-fallback (manually verified) payments without
+  // inventing fields that didn't exist on this schema before.
+  paymentMethod?: 'razorpay' | 'upi_manual';
   status: string;
   notes?: string;
   whatsappSent: boolean;
@@ -27,6 +32,7 @@ const BookingSchema = new Schema<IBooking>({
   formData: { type: Schema.Types.Mixed },
   paymentId: { type: String },
   razorpayOrderId: { type: String },
+  paymentMethod: { type: String, enum: ['razorpay', 'upi_manual'], default: 'razorpay' },
   status: { type: String, enum: ['pending','paid','called','completed','cancelled'], default: 'pending' },
   notes: { type: String },
   whatsappSent: { type: Boolean, default: false },

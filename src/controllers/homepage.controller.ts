@@ -2,8 +2,6 @@ import { Request, Response } from 'express';
 import HomepageSettings from '../models/HomepageSettings';
 import Testimonial from '../models/Testimonial';
 
-// ── Homepage Settings ─────────────────────────────────────────────────────────
-
 export const getHomepageSettings = async (req: Request, res: Response) => {
   try {
     let settings = await HomepageSettings.findOne();
@@ -22,8 +20,6 @@ export const updateHomepageSettings = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
-// ── Theme Settings (stored inside HomepageSettings.themeSettings) ─────────────
 
 export const getThemeSettings = async (req: Request, res: Response) => {
   try {
@@ -47,8 +43,6 @@ export const updateThemeSettings = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
-// ── Testimonials ──────────────────────────────────────────────────────────────
 
 export const getTestimonials = async (req: Request, res: Response) => {
   try {

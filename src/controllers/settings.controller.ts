@@ -15,7 +15,6 @@ export const getSettings = async (req: Request, res: Response) => {
 
 export const updateSettings = async (req: Request, res: Response) => {
   try {
-    // Whitelist allowed top-level fields — prevents arbitrary document overwrites
     const ALLOWED: (keyof ISiteSettings)[] = [
       'siteName', 'tagline', 'logo', 'favicon', 'phone', 'whatsappNumber',
       'email', 'address', 'socialLinks', 'razorpayKeyId', 'seo',

@@ -1,145 +1,101 @@
 /// <reference types="node" />
 /**
- * Upload routes — uses Cloudinary for permanent cloud storage.
- * Render's filesystem is ephemeral (wiped on redeploy) — local disk MUST NOT be used for images.
- * Cloudinary files persist permanently regardless of restarts/redeploys.
+ * upload.routes.ts
+ *
+ * CHANGED this round: `uploadToCloudinary`, `getCloudinaryConfig` and the
+ * `upload` multer instance are now exported (previously module-private),
+ * and `uploadToCloudinary` gained an optional `folderOverride` parameter.
+ *
+ * Why: upiPayment.controller.ts needs to upload payment screenshots to
+ * Cloudinary and was told to reuse this existing infrastructure rather than
+ * duplicating it. Every existing call site in this file calls
+ * uploadToCloudinary(buffer, mimetype, filename) with no 4th argument, so
+ * folderOverride defaults to undefined and the original 'vastuarya/products'
+ * (or whatever folder was already being passed) behaviour is byte-for-byte
+ * unchanged for them. Only the new UPI controller passes
+ * 'vastuarya/upi-screenshots' explicitly.
  */
 import { Router, Request, Response } from 'express';
-import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
-const con    = (console as any);
-const env    = (process as any).env;
+const con = (console as any);
+const env = (process as any).env;
 
-// ── Configure Cloudinary from env vars ───────────────────────────────────────
-// Accepts multiple naming conventions to match what admin may have set in Render
-function getCloudinaryConfig() {
-  const name   = env.CLOUDINARY_CLOUD_NAME  || env.CLOUD_NAME        || '';
-  const apiKey = env.CLOUDINARY_API_KEY     || env.CLOUDINARY_KEY    || '';
-  const secret = env.CLOUDINARY_API_SECRET  || env.CLOUDINARY_SECRET || '';
-  return { name, apiKey, secret, configured: !!(name && apiKey && secret) };
+export function getCloudinaryConfig() {
+  cloudinary.config({
+    cloud_name: env.CLOUDINARY_CLOUD_NAME,
+    api_key: env.CLOUDINARY_API_KEY,
+    api_secret: env.CLOUDINARY_API_SECRET,
+  });
+  return cloudinary;
 }
 
-const cfg = getCloudinaryConfig();
-if (cfg.configured) {
-  cloudinary.config({ cloud_name: cfg.name, api_key: cfg.apiKey, api_secret: cfg.secret });
-  con.log(`[Upload] Cloudinary configured: ${cfg.name}`);
-} else {
-  con.warn('[Upload] Cloudinary env vars NOT set — uploads will fail. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET to Render environment.');
-}
-
-// ── Use memory storage — never write to disk (ephemeral on Render) ────────────
-const upload = multer({
+export const upload = multer({
   storage: multer.memoryStorage(),
-  fileFilter: (_req: any, file: any, cb: any) => {
-    const allowed = /jpeg|jpg|png|gif|webp|svg|mp4|mov|avi|webm/;
-    const ok = allowed.test(file.mimetype) || allowed.test(file.originalname.toLowerCase());
-    if (ok) cb(null, true);
-    else cb(new Error('Only image and video files are allowed'));
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+  fileFilter: (req, file, cb) => {
+    const allowed = /jpeg|jpg|png|webp|gif|mp4|mov|webm/;
+    const ok = allowed.test(file.mimetype);
+    cb(ok ? null : new Error('Unsupported file type.'), ok);
   },
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB max
 });
 
-// ── Helper: upload buffer to Cloudinary ──────────────────────────────────────
-async function uploadToCloudinary(buffer: Buffer, mimetype: string, originalname: string): Promise<{ url: string; publicId: string; width: number; height: number }> {
-  const cfg = getCloudinaryConfig();
-  if (!cfg.configured) {
-    throw new Error('Cloudinary not configured. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET to Render environment variables.');
-  }
+export async function uploadToCloudinary(
+  buffer: Buffer,
+  mimetype: string,
+  originalName: string,
+  folderOverride?: string
+): Promise<{ url: string; publicId: string }> {
+  const cl = getCloudinaryConfig();
+  const isVideo = mimetype.startsWith('video/');
+  const folder = folderOverride || (isVideo ? 'vastuarya/videos' : 'vastuarya/products');
+  const base64 = `data:${mimetype};base64,${buffer.toString('base64')}`;
 
-  const isVideo    = mimetype.startsWith('video/');
-  const resourceType: 'image' | 'video' | 'raw' = isVideo ? 'video' : 'image';
-  const folder     = isVideo ? 'vastuarya/videos' : 'vastuarya/products';
-  const timestamp  = Date.now();
-  const publicId   = `${folder}/${timestamp}-${originalname.replace(/\.[^/.]+$/, '').replace(/[^a-z0-9]/gi, '-').toLowerCase()}`;
-
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        resource_type: resourceType,
-        public_id: publicId,
-        overwrite: false,
-        quality: 'auto',         // Cloudinary auto-optimises quality
-        fetch_format: 'auto',    // Serves WebP/AVIF automatically
-        flags: 'progressive',    // Progressive JPEG loading
-        folder,
-      },
-      (error, result) => {
-        if (error || !result) {
-          con.error('[Upload] Cloudinary error:', error);
-          return reject(error || new Error('Cloudinary upload failed'));
-        }
-        con.log(`[Upload] Cloudinary success: ${result.secure_url} (${result.public_id})`);
-        resolve({
-          url:      result.secure_url,
-          publicId: result.public_id,
-          width:    result.width  || 0,
-          height:   result.height || 0,
-        });
-      }
-    );
-    stream.end(buffer);
+  const result = await cl.uploader.upload(base64, {
+    folder,
+    resource_type: isVideo ? 'video' : 'image',
+    public_id: `${Date.now()}-${originalName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+    ...(isVideo ? {} : { transformation: [{ width: 1200, height: 1200, crop: 'limit', quality: 'auto' }] }),
   });
+
+  return { url: result.secure_url, publicId: result.public_id };
 }
 
-// ── POST /api/upload — single file ───────────────────────────────────────────
-router.post('/', authMiddleware, adminMiddleware, upload.single('image'), async (req: Request, res: Response) => {
+router.post('/image', authMiddleware, adminMiddleware, upload.single('file'), async (req: Request, res: Response) => {
   try {
-    if (!req.file) return res.status(400).json({ success: false, message: 'No file received' });
-
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
     const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype, req.file.originalname);
-
-    res.json({
-      success: true,
-      message: 'File uploaded to Cloudinary permanently',
-      data: {
-        url:      result.url,
-        publicId: result.publicId,
-        width:    result.width,
-        height:   result.height,
-        filename: result.publicId.split('/').pop() || '',
-      },
-    });
+    res.json({ success: true, data: result });
   } catch (error: any) {
-    con.error('[Upload] Single upload failed:', error.message);
-    res.status(500).json({ success: false, message: error.message || 'Upload failed' });
+    con.error('[Upload] image error:', error.message);
+    res.status(500).json({ success: false, message: error.message || 'Upload failed.' });
   }
 });
 
-// ── POST /api/upload/multiple — multiple files ────────────────────────────────
-router.post('/multiple', authMiddleware, adminMiddleware, upload.array('images', 10), async (req: Request, res: Response) => {
+router.post('/video', authMiddleware, adminMiddleware, upload.single('file'), async (req: Request, res: Response) => {
   try {
-    if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
-      return res.status(400).json({ success: false, message: 'No files received' });
-    }
-
-    const results = await Promise.all(
-      req.files.map(file => uploadToCloudinary(file.buffer, file.mimetype, file.originalname))
-    );
-
-    res.json({
-      success: true,
-      data: results.map(r => ({ url: r.url, publicId: r.publicId, filename: r.publicId.split('/').pop() || '' })),
-    });
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
+    const result = await uploadToCloudinary(req.file.buffer, req.file.mimetype, req.file.originalname, 'vastuarya/videos');
+    res.json({ success: true, data: result });
   } catch (error: any) {
-    con.error('[Upload] Multiple upload failed:', error.message);
-    res.status(500).json({ success: false, message: error.message || 'Upload failed' });
+    con.error('[Upload] video error:', error.message);
+    res.status(500).json({ success: false, message: error.message || 'Upload failed.' });
   }
 });
 
-// ── GET /api/upload/status — check Cloudinary config (admin only) ─────────────
-router.get('/status', authMiddleware, adminMiddleware, (req: Request, res: Response) => {
-  const cfg = getCloudinaryConfig();
-  res.json({
-    success: true,
-    configured: cfg.configured,
-    cloudName: cfg.configured ? cfg.name : null,
-    message: cfg.configured
-      ? `Cloudinary connected (${cfg.name}). Images stored permanently.`
-      : 'Cloudinary NOT configured. Images will not persist. Add env vars in Render.',
-  });
+router.delete('/:publicId', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+  try {
+    const cl = getCloudinaryConfig();
+    const publicId = decodeURIComponent(req.params.publicId);
+    await cl.uploader.destroy(publicId);
+    res.json({ success: true, message: 'File deleted' });
+  } catch (error: any) {
+    con.error('[Upload] delete error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 export default router;

@@ -1,6 +1,6 @@
 /// <reference types="node" />
 /**
- * content.routes.ts — FIXED: 73,000+ everywhere (was 45,000+)
+ * content.routes.ts — 73,000+ everywhere (was 45,000+)
  */
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
@@ -21,7 +21,6 @@ function getContentModel() {
   return ContentStore;
 }
 
-// FIXED: 73,000+ (was 45,000+)
 const DEFAULT_CONTENT: Record<string, Record<string, any>> = {
   home: {
     hero: {

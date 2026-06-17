@@ -1,15 +1,21 @@
+/// <reference types="node" />
+/**
+ * review.routes.ts — Product/service review submission and admin moderation.
+ * Inline handlers (no separate controller file).
+ */
 import { Router, Request, Response } from 'express';
 import Review from '../models/Review';
-import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
+import Product from '../models/Product';
+import { authMiddleware, adminMiddleware, optionalAuth, AuthRequest } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { productId, serviceId, isApproved } = req.query;
+    const { product, service, isApproved = 'true' } = req.query;
     const filter: any = {};
-    if (productId) filter.product = productId;
-    if (serviceId) filter.service = serviceId;
+    if (product) filter.product = product;
+    if (service) filter.service = service;
     if (isApproved !== undefined) filter.isApproved = isApproved === 'true';
     const reviews = await Review.find(filter).sort('-createdAt');
     res.json({ success: true, data: reviews });
@@ -18,19 +24,35 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const review = await Review.create(req.body);
-    res.status(201).json({ success: true, data: review });
+    const { product, service, name, rating, comment } = req.body;
+    if (!rating || !comment) return res.status(400).json({ success: false, message: 'Rating and comment are required.' });
+    const review = await Review.create({
+      product: product || undefined,
+      service: service || undefined,
+      user: req.user?._id,
+      name: name || req.user?.name || 'Anonymous',
+      rating,
+      comment,
+      isApproved: false,
+    });
+    res.status(201).json({ success: true, message: 'Review submitted, pending approval.', data: review });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-router.put('/:id', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+router.put('/:id/approve', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
-    const review = await Review.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json({ success: true, data: review });
+    const review = await Review.findByIdAndUpdate(req.params.id, { isApproved: true }, { new: true });
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+    if (review.product) {
+      const approved = await Review.find({ product: review.product, isApproved: true });
+      const avg = approved.reduce((s, r) => s + r.rating, 0) / approved.length;
+      await Product.findByIdAndUpdate(review.product, { rating: Math.round(avg * 10) / 10, reviewCount: approved.length });
+    }
+    res.json({ success: true, message: 'Review approved', data: review });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

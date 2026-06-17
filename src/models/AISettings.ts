@@ -18,7 +18,6 @@ export interface IAISettings extends Document {
 const AISettingsSchema = new Schema<IAISettings>({
   systemPrompt: {
     type: String,
-    // FIXED: 73,000+ (was 45,000+)
     default: `You are Dr. Pranveer Pratap Singh Tomar (Dr. PPS Tomar), an IVAF Certified Vastu Shastra expert with 15+ years of experience. You have helped 73,000+ clients transform their homes and lives.
 
 Your role:

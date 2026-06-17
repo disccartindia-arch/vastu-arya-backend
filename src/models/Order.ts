@@ -10,6 +10,8 @@ export interface IOrder extends Document {
   paymentId?: string;
   razorpayOrderId?: string;
   razorpaySignature?: string;
+  // NEW — additive, defaults to 'razorpay'. See Booking.ts for rationale.
+  paymentMethod?: 'razorpay' | 'upi_manual';
   type: 'product' | 'service' | 'booking';
   notes?: string;
 }
@@ -37,6 +39,7 @@ const OrderSchema = new Schema<IOrder>({
   paymentId: { type: String },
   razorpayOrderId: { type: String },
   razorpaySignature: { type: String },
+  paymentMethod: { type: String, enum: ['razorpay', 'upi_manual'], default: 'razorpay' },
   type: { type: String, enum: ['product', 'service', 'booking'], default: 'product' },
   notes: { type: String },
 }, { timestamps: true });

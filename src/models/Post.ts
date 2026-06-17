@@ -8,7 +8,7 @@ export interface IPost extends Document {
   location?: string;
   media: { url: string; type: 'image' | 'video'; thumbnail?: string }[];
   likes: number;
-  likedBy: string[]; // session IDs or user IDs
+  likedBy: string[];
   commentCount: number;
   isFeatured: boolean;
   isPublished: boolean;

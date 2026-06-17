@@ -59,12 +59,10 @@ export const updateUser = async (req: (Request & { user?: any }), res: Response)
   try {
     const targetId = req.params.id;
 
-    // Prevent admin from deactivating or demoting their own account
     if (req.user && String(req.user._id) === String(targetId)) {
       return res.status(400).json({ success: false, message: 'You cannot modify your own admin account.' });
     }
 
-    // Whitelist only safe, known fields — no arbitrary updates
     const { role, isActive } = req.body;
     const update: Record<string, any> = {};
 

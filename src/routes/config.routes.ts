@@ -19,7 +19,6 @@ import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
 const router = Router();
 const con = (console as any);
 
-// ── Lazy model (singleton key-value config document) ─────────────────────────
 let ConfigModel: mongoose.Model<any>;
 
 function getConfigModel() {
@@ -36,7 +35,6 @@ function getConfigModel() {
   return ConfigModel;
 }
 
-// ── Defaults (mirrors BG_FIELDS in website-editor/page.tsx) ──────────────────
 const DEFAULTS: Record<string, any> = {
   bg_animations_enabled: true,
   bg_particles_enabled:  true,
@@ -46,28 +44,22 @@ const DEFAULTS: Record<string, any> = {
   bg_star_density:       80,
 };
 
-// ── GET /api/config ───────────────────────────────────────────────────────────
 router.get('/', async (req: Request, res: Response) => {
   try {
     const Model = getConfigModel();
     let doc = await Model.findOne({ _singleton: 'main' });
     if (!doc) doc = await Model.create({ _singleton: 'main', data: DEFAULTS });
-    // Merge with defaults so new keys always have a value
     const merged = { ...DEFAULTS, ...(doc.data || {}) };
     res.json({ success: true, data: merged });
   } catch (error: any) {
     con.error('[Config] GET / error:', error.message);
-    res.json({ success: true, data: DEFAULTS }); // safe fallback
+    res.json({ success: true, data: DEFAULTS });
   }
 });
 
-// ── PUT /api/config ───────────────────────────────────────────────────────────
 router.put('/', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
-    // Accept either { key: val, key2: val2 } flat object, or { data: { ... } }
     const incoming = req.body?.data ?? req.body;
-
-    // Whitelist only known safe config keys (prevent storing arbitrary data)
     const ALLOWED_PREFIXES = ['bg_', 'theme_', 'feature_', 'ui_'];
     const filtered: Record<string, any> = {};
     for (const [k, v] of Object.entries(incoming)) {

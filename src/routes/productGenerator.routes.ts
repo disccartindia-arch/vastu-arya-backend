@@ -1,103 +1,57 @@
 /// <reference types="node" />
+/**
+ * productGenerator.routes.ts — AI-assisted product listing generator for
+ * the admin panel. Admin supplies a rough product name/category and gets
+ * back a structured draft (description, benefits, SEO-friendly name) they
+ * can review and edit before saving via product.controller.ts's createProduct.
+ *
+ * Uses the same callAI/parseAIJson helpers as the Vastu AI assistant
+ * (ai.routes.ts) — same provider fallback chain (Gemini -> Anthropic),
+ * same demo-mode behaviour when no keys are configured.
+ */
 import { Router, Request, Response } from 'express';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
-import AISettings from '../models/AISettings';
-import rateLimit from 'express-rate-limit';
 import { callAI, parseAIJson, sanitiseUserInput } from '../utils/ai.service';
 
-const router  = Router();
-const con     = (console as any);
-const genLimit = rateLimit({ windowMs: 60 * 1000, max: 10, message: { success: false, message: 'Rate limit reached' } });
+const router = Router();
+const con = (console as any);
 
-router.post('/generate', authMiddleware, adminMiddleware, genLimit, async (req: Request, res: Response) => {
-  try {
-    const rawInput   = req.body?.input;
-    const rawCat     = req.body?.category;
-    const input    = sanitiseUserInput(String(rawInput || ''), 300);
-    const category = sanitiseUserInput(String(rawCat   || 'spiritual'), 80);
+const SYSTEM_PROMPT = `You are a product copywriter for Vastu Arya, an Indian spiritual/Vastu e-commerce store selling crystals, gemstones, Rudraksha, yantras and spiritual decor.
 
-    if (!input || input.trim().length < 3) {
-      return res.status(400).json({ success: false, message: 'Product name/description required' });
-    }
+Given a rough product name and category, generate a polished listing.
 
-    const slug = input.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-
-    const prompt = `You are a premium spiritual product copywriter for Vastu Arya, an IVAF Certified Vastu consultancy. Generate a complete product listing for: "${input}" in category: "${category}".
-
-Return ONLY a valid JSON object (no markdown, no backticks) with this EXACT structure:
+Respond ONLY as JSON, no markdown:
 {
-  "name": { "en": "Full Product Name", "hi": "Hindi name" },
-  "slug": "${slug}",
-  "category": "${category}",
-  "description": {
-    "en": "3-4 sentence premium product description. Mention: origin/tradition, spiritual significance, chakra connection if applicable, who should use it and how. 80-120 words. Sound premium and trustworthy.",
-    "hi": "Hindi translation of description (2-3 sentences)"
-  },
-  "benefits": [
-    "Benefit 1 — specific and authentic",
-    "Benefit 2 — chakra or planetary connection",
-    "Benefit 3 — practical everyday benefit",
-    "Benefit 4 — Vastu or spiritual purpose"
-  ],
-  "price": 999,
-  "offerPrice": 699,
-  "sku": "VA-${slug.slice(0,6).toUpperCase()}",
-  "stock": 50,
-  "isFeatured": false,
-  "isNewLaunch": true,
-  "isActive": false,
-  "images": [""]
-}
+  "name": { "en": "polished product name", "hi": "Hindi translation" },
+  "description": { "en": "2-3 sentence description", "hi": "Hindi translation" },
+  "benefits": ["benefit 1", "benefit 2", "benefit 3", "benefit 4"],
+  "seoTitle": "SEO friendly title under 60 chars",
+  "seoKeywords": "comma, separated, keywords"
+}`;
 
-Rules:
-- No fake medical/health cure claims
-- Price in Indian Rupees (₹), realistic market price
-- Authentic spiritual/Vastu information only
-- Keep en description 80-120 words, professional tone
-- Return ONLY the JSON, no other text`;
-
-    let rawText = '';
-    try {
-      const result = await callAI('You are a premium spiritual product copywriter.', prompt);
-      rawText = result.text;
-    } catch (aiErr: any) {
-      con.warn('[ProductGen] AI call failed:', aiErr.message, '— using template');
-      // Template fallback
-      const templateProduct = {
-        name:{ en: input.trim(), hi: '' },
-        slug,
-        category,
-        description:{ en: `Natural ${input.trim()} from authentic sources. This premium spiritual product carries unique energy properties beneficial for meditation, wellbeing and Vastu enhancement. Suitable for daily wear or home placement. Comes with a Dr. PPS Tomar usage guide.`, hi: '' },
-        benefits:[`Enhances spiritual awareness`, `Vastu recommended placement`, `Ideal for meditation`, `Premium quality, authenticated`],
-        price: 999, offerPrice: 699,
-        sku: `VA-${slug.slice(0,6).toUpperCase()}`,
-        stock: 50, isFeatured: false, isNewLaunch: true, isActive: false, images:[''],
-      };
-      return res.json({ success: true, data: templateProduct, source: 'template' });
+router.post('/', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { productName, category } = req.body;
+    if (!productName) {
+      return res.status(400).json({ success: false, message: 'productName is required.' });
     }
+    const cleanName = sanitiseUserInput(productName, 200);
+    const cleanCategory = sanitiseUserInput(category || 'spiritual product', 100);
 
-    // Parse JSON from AI response
-    let parsed: any;
-    try {
-      parsed = parseAIJson(rawText);
-    } catch { parsed = null; }
+    const { text, source } = await callAI(SYSTEM_PROMPT, `Product: ${cleanName}\nCategory: ${cleanCategory}`);
+    const parsed = parseAIJson(text);
 
     if (!parsed) {
-      return res.status(500).json({ success: false, message: 'AI returned unparseable response. Please try again.' });
+      return res.status(502).json({ success: false, message: 'AI returned an unparseable response. Please try again.' });
     }
 
-    // Ensure required fields
-    parsed.slug        = parsed.slug        || slug;
-    parsed.category    = parsed.category    || category;
-    parsed.isActive    = parsed.isActive    ?? false;
-    parsed.isNewLaunch = parsed.isNewLaunch ?? true;
-    parsed.images      = parsed.images      || [''];
-
-    const { getGeminiKey } = await import('../utils/ai.service');
-    res.json({ success: true, data: parsed, source: getGeminiKey() ? 'gemini' : 'anthropic' });
-  } catch (err: any) {
-    con.error('[ProductGen] Error:', err);
-    res.status(500).json({ success: false, message: err.message || 'Generation failed' });
+    res.json({ success: true, data: parsed, source });
+  } catch (error: any) {
+    con.error('[ProductGenerator] error:', error.message);
+    if (error.message === 'NO_PROVIDER') {
+      return res.status(503).json({ success: false, message: 'No AI provider configured. Set GEMINI_API_KEY or ANTHROPIC_API_KEY.' });
+    }
+    res.status(500).json({ success: false, message: 'Generation failed. Please try again or fill the listing manually.' });
   }
 });
 

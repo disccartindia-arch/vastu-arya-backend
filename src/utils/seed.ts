@@ -146,7 +146,6 @@ const services = [
     sortOrder: 6,
     seo: { title: 'Vastu Consultancy by Dr. PPS Tomar | Book @ ₹1100 | Vastu Arya', description: 'Personal consultation with IVAF certified Dr. PPS Tomar. Video/phone call. Book advance at ₹1,100 or full package ₹11,000.', keywords: 'vastu consultancy, vastu expert, Dr PPS, vastu consultation' }
   },
-
   {
     title: { en: 'Home Energy Vastu Analysis', hi: 'घर की ऊर्जा वास्तु विश्लेषण' },
     slug: 'home-energy-analysis',
