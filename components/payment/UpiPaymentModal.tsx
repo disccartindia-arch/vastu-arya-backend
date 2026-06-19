@@ -3,70 +3,52 @@
  * components/payment/UpiPaymentModal.tsx
  * ─────────────────────────────────────────────────────────────────
  * Manual UPI fallback flow — no Razorpay, no automatic verification.
- * Shared by BOTH service payments (ServicePaymentButtons.tsx,
- * AppointmentPopup.tsx) and product payments (product detail page) —
- * one component, one fix applies everywhere.
+ * Shared by Service payments, the ₹11 Book Appointment flow, and
+ * Product payments — one component, fixes apply everywhere it's used.
  *
- * CHANGED this round (QR display fix — see REPORT.md "Issue 1"):
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 2 — Issue #1, QR
+ * over-cropped):
  *
- * ROOT CAUSE: the QR source images supplied (/images/qr/upi-*.jpeg)
- * are full 716x1600 phone-screenshot captures of PhonePe's "Receive
- * Money" screen — not pre-cropped square QR codes. The actual scannable
- * QR pattern only occupies the vertical band from roughly y=36% to
- * y=71% of the image (a near-perfect square once isolated). The
- * previous version rendered these with `object-contain` inside a fixed
- * 192x192px box, which (correctly, per object-contain's definition)
- * shrank the WHOLE tall image to fit — leaving the actual QR pattern at
- * only ~75px, far too small to scan, surrounded by now-empty
- * horizontal whitespace where the rest of the tall screenshot used to
- * be.
+ * ROOT CAUSE OF THE REGRESSION: the previous round's fix used
+ * `object-cover` + a computed `object-position` + a CSS `scale()`
+ * transform to zoom into the measured QR region of the (uncropped,
+ * tall) source screenshots. That fix was visually correct in testing,
+ * but real-device scanning (Paytm, PhonePe, Google Pay) failed because
+ * QR codes require an intact "quiet zone" (a margin of plain white
+ * space around the pattern) for reliable decode — most scanner
+ * libraries refuse to lock onto a code if that margin is cropped too
+ * tight, even if the QR's data modules themselves are all visible.
+ * The scale()-zoom approach has no way to guarantee the quiet zone
+ * survives, since it was derived from an approximate visual crop
+ * region, not the QR's actual finder-pattern boundaries.
  *
- * FIX: switched to `object-cover` + an explicit `object-position`
- * computed from the measured crop region of the two known source
- * images (left 11.2%, right 88.7%, top 35.9%, bottom 70.6% of a
- * 716x1600 original — see REPORT.md for exact pixel math), combined
- * with a CSS `scale()` zoom on the image so the isolated QR square
- * fills the container edge-to-edge instead of being inset. This works
- * with the CURRENT uncropped screenshots with no asset changes needed.
- * Container size increased from 192x192 (h-48 w-48) to a responsive
- * min(80vw, 320px) square so the QR is genuinely large and scannable on
- * mobile, with both UPI IDs always visible and tappable-to-copy below
- * it (unchanged behavior, made more prominent).
+ * FIX PER YOUR INSTRUCTION: removed ALL automatic cropping/zooming.
+ * The image is now rendered with `object-contain` inside a much larger
+ * container (320–400px desktop, 260–320px mobile, both responsive),
+ * so the complete image — full quiet zone included — is always
+ * visible and undistorted. This trades some visual "wasted space"
+ * above/below the QR pattern (since the source images are tall
+ * screenshots, not square crops) for guaranteed scannability, which is
+ * the correct trade-off for a payment flow.
  *
- * NOTE: this crop transform is a stopgap tuned to the two specific
- * images currently in use. If new QR images are uploaded that are
- * ALREADY cropped square (recommended — see REPORT.md for exact export
- * dimensions), this component should switch back to plain
- * `object-contain` with no transform, since a pre-cropped square image
- * needs no further cropping. A `QR_IMAGES_ARE_PRECROPPED` flag is
- * included below to make that switch a one-line change.
+ * Also added in this round:
+ *  - "Open in UPI App" deep-link button (upi://pay intent) for mobile
+ *    users who can't scan their own screen — opens GPay/PhonePe/Paytm/
+ *    BHIM directly with the UPI ID and amount prefilled.
+ *  - Used on BOTH primary and secondary UPI options.
+ *  - Container sizing now explicitly responsive per your target
+ *    (mobile 260–320px, desktop 320–400px) via CSS clamp().
  *
- * Everything else in this file (submission endpoint, field names,
- * response parsing) is unchanged from the prior fixed version — see
- * that version's own changelog comments preserved below.
+ * Submission logic (handleSubmit, field names, endpoint, response
+ * parsing) is unchanged from the prior round.
  * ─────────────────────────────────────────────────────────────────
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Image from 'next/image';
-import { Copy, CheckCircle, X, Upload, Loader2, QrCode } from 'lucide-react';
+import { Copy, CheckCircle, X, Upload, Loader2, QrCode, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PAYMENT_ROUTES, UPI_FALLBACK, fetchPaymentSettings, formatAmount } from '@/config/payment.config';
-
-// Flip this to `true` once clean, pre-cropped square QR images are
-// uploaded (see REPORT.md "Issue 1" for exact export dimensions).
-// When true, the crop transform below is skipped entirely.
-const QR_IMAGES_ARE_PRECROPPED = false;
-
-// Measured crop region of the current uncropped 716x1600 screenshots —
-// see REPORT.md for the exact pixel derivation. Expressed as fractions
-// of the full image so it's resolution-independent.
-const QR_CROP = {
-  left: 0.112,
-  right: 0.887,
-  top: 0.359,
-  bottom: 0.706,
-};
 
 export interface UpiPaymentModalProps {
   isOpen:      boolean;
@@ -83,37 +65,16 @@ export interface UpiPaymentModalProps {
 type Step = 'payment' | 'upload' | 'done';
 type UpiOption = { id: string; label: string; qr: string };
 
-/**
- * Computes the CSS transform needed to zoom an `object-cover`'d image
- * so that only the QR_CROP region fills the container, simulating a
- * real crop without needing a server-side image transform.
- *
- * Math: object-position as a percentage tells the browser which point
- * of the image to align with which point of the container once scaled
- * to cover. We pair that with a scale() to "zoom in" by the inverse of
- * the crop region's size, so the cropped area fills 100% of the box.
- */
-function getQrCropStyle() {
-  if (QR_IMAGES_ARE_PRECROPPED) return {};
-
-  const cropWidthFrac  = QR_CROP.right - QR_CROP.left;   // 0.775
-  const cropHeightFrac = QR_CROP.bottom - QR_CROP.top;   // 0.347
-
-  // Scale so the crop region (currently ~77.5% x 34.7% of the image)
-  // fills the whole container. We scale by the larger zoom factor
-  // needed on the constrained axis, then center on the crop region.
-  const scaleX = 1 / cropWidthFrac;
-  const scaleY = 1 / cropHeightFrac;
-  const scale  = Math.max(scaleX, scaleY);
-
-  const centerXPct = ((QR_CROP.left + QR_CROP.right) / 2) * 100;
-  const centerYPct = ((QR_CROP.top + QR_CROP.bottom) / 2) * 100;
-
-  return {
-    objectPosition: `${centerXPct}% ${centerYPct}%`,
-    transform: `scale(${scale.toFixed(3)})`,
-    transformOrigin: `${centerXPct}% ${centerYPct}%`,
-  } as React.CSSProperties;
+/** Builds a standard upi:// deep link so mobile users can tap to open their UPI app directly. */
+function buildUpiIntentLink(upiId: string, payeeName: string, amount: number, note: string): string {
+  const params = new URLSearchParams({
+    pa: upiId,
+    pn: payeeName,
+    am: amount.toFixed(2),
+    cu: 'INR',
+    tn: note,
+  });
+  return `upi://pay?${params.toString()}`;
 }
 
 export default function UpiPaymentModal({
@@ -134,19 +95,20 @@ export default function UpiPaymentModal({
 
   const [upiPrimary,   setUpiPrimary]   = useState<UpiOption>(UPI_FALLBACK.primary);
   const [upiSecondary, setUpiSecondary] = useState<UpiOption>(UPI_FALLBACK.secondary);
+  const [payeeName,    setPayeeName]    = useState<string>(UPI_FALLBACK.payeeName);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
-    fetchPaymentSettings().then(({ primary, secondary }) => {
+    fetchPaymentSettings().then(({ primary, secondary, payeeName: pn }) => {
       setUpiPrimary(primary);
       setUpiSecondary(secondary);
+      if (pn) setPayeeName(pn);
     });
   }, [isOpen]);
 
   const upi = activeUpi === 'primary' ? upiPrimary : upiSecondary;
-  const qrCropStyle = getQrCropStyle();
 
   const resetAndClose = useCallback(() => {
     setStep('payment'); setActiveUpi('primary'); setCopied(false);
@@ -222,9 +184,11 @@ export default function UpiPaymentModal({
 
   if (!isOpen) return null;
 
+  const intentLink = buildUpiIntentLink(upi.id, payeeName, amount, `${itemName} - Vastu Arya`);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-3 sm:p-4">
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl max-h-[94vh] overflow-y-auto">
         <button
           onClick={resetAndClose}
           className="absolute top-3 right-3 z-10 rounded-full bg-gray-100 p-1.5 text-gray-500 hover:bg-gray-200"
@@ -255,25 +219,38 @@ export default function UpiPaymentModal({
               </button>
             </div>
 
-            {/* QR — large, centered, auto-cropped/zoomed to the scannable region */}
+            {/* QR — FULL image, no crop, no zoom. Quiet zone fully intact. */}
             <div className="mt-4 flex flex-col items-center rounded-2xl bg-gray-50 p-4 sm:p-5">
               <div
-                className="relative overflow-hidden rounded-xl bg-white shadow-sm border border-gray-100 mx-auto"
-                style={{ width: 'min(78vw, 320px)', height: 'min(78vw, 320px)' }}
+                className="relative overflow-visible rounded-xl bg-white shadow-sm border border-gray-100 mx-auto"
+                style={{
+                  width:  'clamp(260px, 78vw, 400px)',
+                  height: 'clamp(260px, 78vw, 400px)',
+                }}
               >
                 <Image
                   src={upi.qr}
                   alt={`${upi.label} QR code — scan to pay ${formatAmount(amount)}`}
                   fill
-                  className="object-cover"
-                  style={qrCropStyle}
-                  sizes="(max-width: 420px) 78vw, 320px"
+                  className="object-contain"
+                  sizes="(max-width: 420px) 78vw, 400px"
                   priority
                 />
               </div>
+              <p className="mt-2 text-[11px] text-gray-400 text-center">
+                Full QR shown — scan with any UPI app
+              </p>
+
+              {/* Open in UPI App — mobile deep link */}
+              <a
+                href={intentLink}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-white"
+              >
+                <ExternalLink size={15} /> Open in UPI App
+              </a>
 
               {/* Both UPI IDs always visible, each independently copyable */}
-              <div className="mt-4 w-full space-y-2">
+              <div className="mt-3 w-full space-y-2">
                 {[upiPrimary, upiSecondary].map(option => (
                   <button
                     key={option.id}

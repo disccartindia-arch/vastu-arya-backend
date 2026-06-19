@@ -1,6 +1,31 @@
 'use client';
+/**
+ * app/(public)/vastu-store/product/[slug]/page.tsx
+ *
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 2 — Issue #7, page
+ * speed / Cloudinary):
+ *
+ * The main product image is the single largest LCP (Largest
+ * Contentful Paint) element on this page — it was a raw <img> with no
+ * `priority` hint, no responsive `sizes`, and no Cloudinary delivery
+ * transform, so the browser was downloading the full upload-resolution
+ * image (per upload.routes.ts's transformation: width 1200, height
+ * 1200) even though it renders inside a much smaller box on mobile.
+ *
+ * FIXED: migrated the main image and thumbnail strip to next/image
+ * with `priority` on the main image (it's above the fold), explicit
+ * `sizes` matching the actual rendered layout, and optimizeImageUrl()
+ * applying Cloudinary's f_auto/q_auto/w_ delivery transform sized to
+ * where each image actually renders (full main image vs. small 64px
+ * thumbnails) — so thumbnails no longer download the same large file
+ * as the hero image.
+ *
+ * UPI/Buy Now logic, cart logic, and all other page behavior are
+ * unchanged from the prior round.
+ */
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Image from 'next/image';
 import Navbar from '../../../../../components/layout/Navbar';
 import Footer from '../../../../../components/layout/Footer';
 import CartDrawer from '../../../../../components/common/CartDrawer';
@@ -11,6 +36,7 @@ import UpiPaymentModal from '../../../../../components/payment/UpiPaymentModal';
 import { useUIStore } from '../../../../../store/uiStore';
 import { useCartStore } from '../../../../../store/cartStore';
 import { productsAPI } from '../../../../../lib/api';
+import { optimizeImageUrl } from '../../../../../lib/imageOptimize';
 import { Product } from '../../../../../types';
 import { ShoppingCart, CheckCircle, Star, MessageCircle, QrCode } from 'lucide-react';
 import Link from 'next/link';
@@ -92,7 +118,17 @@ export default function ProductDetailPage() {
                 {discount > 0 && <div className="absolute top-4 left-4 z-10 bg-green-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl">{discount}% OFF</div>}
                 {product.isNewLaunch && <div className="absolute top-4 right-4 z-10 bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-xl">NEW</div>}
                 {validImages[activeImg] ? (
-                  <img src={validImages[activeImg]} alt={name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  // FIXED: next/image with priority (above-the-fold LCP element),
+                  // explicit responsive sizes, and Cloudinary delivery transform
+                  // sized to the actual rendered box instead of the full upload.
+                  <Image
+                    src={optimizeImageUrl(validImages[activeImg], 800)}
+                    alt={name}
+                    fill
+                    priority
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    className="object-cover"
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-8xl bg-orange-50">🕉️</div>
                 )}
@@ -100,8 +136,10 @@ export default function ProductDetailPage() {
               {validImages.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {validImages.map((img, i) => (
-                    <button key={i} onClick={() => setActiveImg(i)} className={`w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border-2 transition-all ${activeImg === i ? 'border-primary' : 'border-transparent hover:border-orange-200'}`}>
-                      <img src={img} alt="" loading="lazy" className="w-full h-full object-cover" />
+                    <button key={i} onClick={() => setActiveImg(i)} className={`relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border-2 transition-all ${activeImg === i ? 'border-primary' : 'border-transparent hover:border-orange-200'}`}>
+                      {/* FIXED: thumbnails request a small 100px-wide transform
+                          instead of downloading the same large hero image. */}
+                      <Image src={optimizeImageUrl(img, 100)} alt="" fill sizes="64px" className="object-cover" />
                     </button>
                   ))}
                 </div>

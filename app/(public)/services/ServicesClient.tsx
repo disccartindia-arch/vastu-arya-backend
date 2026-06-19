@@ -1,4 +1,29 @@
 'use client';
+/**
+ * app/(public)/services/ServicesClient.tsx
+ *
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 2 — Issue #2, Book
+ * Appointment ₹11 missing UPI fallback):
+ *
+ * ROOT CAUSE: this file special-cased `s.slug === 'book-appointment'`
+ * to render ONLY a single "Book @ ₹11" button that opens the
+ * appointment popup (Razorpay-only path) — every other service card
+ * rendered both "View Details" AND a UPI button. Confirmed visually
+ * (production screenshot): the Book Appointment card has no UPI option
+ * while the Mobile Number Numerology card right next to it does.
+ *
+ * FIX: the Book Appointment card now renders its "Book @ ₹11" button
+ * (unchanged — still opens the popup, where Razorpay AND a per-service
+ * UPI button both already exist per-service inside the popup list) AND
+ * an explicit standalone UPI button that opens UpiPaymentModal directly
+ * for the ₹11 booking item, exactly like every other service card.
+ * This does not change what happens inside the popup — it adds a
+ * second, faster path directly to UPI without going through the popup
+ * first, consistent with every other card's behavior.
+ *
+ * Razorpay logic, popup logic, and every other service card's
+ * rendering are unchanged.
+ */
 import { useEffect, useState } from 'react';
 import Navbar from '../../../components/layout/Navbar';
 import Footer from '../../../components/layout/Footer';
@@ -93,12 +118,24 @@ export default function ServicesPage() {
                     <PriceDisplay original={s.originalPrice} offer={s.offerPrice} size="sm" />
                     <div className="flex gap-2 mt-4">
                       {s.slug === 'book-appointment' ? (
-                        <button
-                          onClick={() => setShowAppointmentPopup(true)}
-                          className="flex-1 bg-primary hover:bg-primary-dark text-white py-2.5 rounded-xl text-sm font-semibold transition-all"
-                        >
-                          {lang === 'en' ? '📅 Book @ ₹11' : '📅 ₹11 में बुक करें'}
-                        </button>
+                        <>
+                          {/* FIXED: was the ONLY button on this card — no UPI option.
+                              Now matches every other card: primary action + UPI button. */}
+                          <button
+                            onClick={() => setShowAppointmentPopup(true)}
+                            className="flex-1 bg-primary hover:bg-primary-dark text-white py-2.5 rounded-xl text-sm font-semibold transition-all"
+                          >
+                            {lang === 'en' ? '📅 Book @ ₹11' : '📅 ₹11 में बुक करें'}
+                          </button>
+                          <button
+                            onClick={() => openUpi(s)}
+                            className="flex items-center gap-1.5 px-3 py-2.5 border-2 border-orange-400 text-orange-700 rounded-xl text-xs font-semibold hover:bg-orange-50 transition-all"
+                            title="Pay via UPI"
+                          >
+                            <QrCode size={14} />
+                            UPI
+                          </button>
+                        </>
                       ) : (
                         <>
                           <Link
