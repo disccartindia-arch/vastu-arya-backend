@@ -1,3 +1,25 @@
+/**
+ * src/controllers/payment.controller.ts
+ *
+ * FIXED (June 2026 forensic trace — see REPORT.md "Issue 6 & 2"):
+ * verifyPayment()'s success responses never included a top-level
+ * `paymentStatus` field, but lib/razorpay.ts's frontend handler gates
+ * options.onSuccess() on `verifyRes.data.paymentStatus === 'paid'`.
+ * Since that field was always undefined, the frontend ALWAYS fell into
+ * its failure branch — showing "Payment could not be verified" and
+ * never clearing the cart / redirecting — even though the Order or
+ * Booking document was already correctly created here with a valid
+ * Razorpay signature. This is the root cause of "payment success
+ * without business success" (Issue 6) and "product orders not
+ * appearing to be created" (Issue 2): the order WAS created, the
+ * frontend just never found out.
+ *
+ * The only change in this file vs the previously-uploaded version is
+ * the addition of `paymentStatus: 'paid'` to both success response
+ * objects below. Razorpay order-creation, signature verification (HMAC
+ * check), and all database writes are completely untouched, per the
+ * "do not break Razorpay" requirement.
+ */
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
@@ -62,7 +84,8 @@ export const verifyPayment = async (req: Request, res: Response) => {
           html: bookingConfirmationEmail(orderData.name, orderData.serviceName, bookingId, orderData.amount)
         });
       }
-      return res.json({ success: true, message: 'Booking confirmed!', data: { bookingId, paymentId: razorpay_payment_id } });
+      // FIXED: added paymentStatus so frontend's onSuccess() actually fires.
+      return res.json({ success: true, paymentStatus: 'paid', message: 'Booking confirmed!', data: { bookingId, paymentId: razorpay_payment_id } });
     }
 
     if (type === 'product') {
@@ -78,10 +101,12 @@ export const verifyPayment = async (req: Request, res: Response) => {
         razorpaySignature: razorpay_signature,
         type: 'product',
       });
-      return res.json({ success: true, message: 'Order placed successfully!', data: { orderId, paymentId: razorpay_payment_id } });
+      // FIXED: added paymentStatus so frontend's onSuccess() actually fires.
+      return res.json({ success: true, paymentStatus: 'paid', message: 'Order placed successfully!', data: { orderId, paymentId: razorpay_payment_id } });
     }
 
-    res.json({ success: true, message: 'Payment verified', data: { paymentId: razorpay_payment_id } });
+    // FIXED: also added here for the generic/unspecified type branch, for consistency.
+    res.json({ success: true, paymentStatus: 'paid', message: 'Payment verified', data: { paymentId: razorpay_payment_id } });
   } catch (error: any) {
     console.error('Payment verify error:', error);
     res.status(500).json({ success: false, message: 'Payment verification failed' });
