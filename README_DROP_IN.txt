@@ -1,23 +1,16 @@
-DROP-IN INSTRUCTIONS — BACKEND-for-Render_v2_6.zip
+DROP-IN INSTRUCTIONS — BACKEND_FIXED.zip (Round 2)
 ====================================================
 
-This zip contains ONLY the files that changed this round, in the same
-relative path as your repo, so you can drop them straight in:
+  src/controllers/payment.controller.ts
 
-  src/controllers/payment.controller.ts   <- REPLACES your existing file
+This is the SAME fix from Round 1 (paymentStatus: 'paid' added to all
+3 success responses in verifyPayment()) — carried forward unchanged
+because it's still the active, correct fix and no backend issue was
+found this round that required further changes.
 
-WHAT CHANGED:
-  Added `paymentStatus: 'paid'` to 3 success-response objects in
-  verifyPayment(). Nothing else in this file was touched. See
-  CHANGELOG.md / REPORT.md in this zip for full detail and reasoning.
+If Round 1's backend zip is already deployed, this is a no-op redeploy.
+Included here so this round's frontend+backend ship as a complete,
+matched pair per your request.
 
-HOW TO APPLY:
-  1. Copy src/controllers/payment.controller.ts into your backend repo,
-     overwriting the existing file at the same path.
-  2. Commit, push, let Render redeploy.
-  3. No environment variables, no new dependencies, no DB migration
-     needed.
-
-NOT INCLUDED (per your audit instructions — destructive/flagged, not
-auto-applied):
-  - Deletion of the 4 dead-code UPI files (see REPORT.md "Issue 7")
+See REPORT.md, CHANGELOG.md, DEPLOYMENT_CHECKLIST.md in the parent
+delivery for full detail.
