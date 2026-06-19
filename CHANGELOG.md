@@ -1,136 +1,52 @@
-# CHANGELOG.md
-## VastuArya.com — Payment Security Hardening + UPI Fix
-## Release: v2.4 | Date: June 2026
+# CHANGELOG — June 19, 2026 forensic fix round (final)
 
----
+## Backend files changed
 
-## FILES ADDED
+### `src/controllers/payment.controller.ts`
+**What changed:** Added `paymentStatus: 'paid'` to three response objects inside `verifyPayment()` — the booking/service success branch, the product success branch, and the generic fallback branch.
 
-### Frontend
-| File | Reason |
-|------|--------|
-| `config/payment.config.ts` | Central payment config — single source of truth for UPI IDs, QR paths, service count |
-| `components/payment/UpiPaymentModal.tsx` | Complete UPI payment modal (QR + copy ID + screenshot upload + "I Have Paid") |
-| `components/payment/ServicePaymentButtons.tsx` | Payment button group for service pages (UPI + Razorpay) |
-| `hooks/useUpiPayment.ts` | Universal hook to control UPI modal from any page |
-| `utils/productImageAudit.ts` | Utilities to filter/deactivate products with missing images |
-| `app/api/payment/upi-pending/route.ts` | API: receives screenshot, creates UPI_PENDING record |
-| `app/api/products/route.ts` | Public products API with image filter applied |
-| `public/images/qr/upi-primary-aryavartguna.jpeg` | Primary QR (SBI - aryavartguna@ybl) |
-| `public/images/qr/upi-secondary-vastuarya.jpeg` | Secondary QR (IDBI - vastuarya@ybl) |
+**What did NOT change:** `createOrder()`, Razorpay HMAC signature verification, `Booking.create()`/`Order.create()` write logic, email sending logic. No imports added or removed. No new endpoints.
 
-### Backend
-| File | Reason |
-|------|--------|
-| `models/UpiPayment.ts` | MongoDB model for UPI payment submissions |
-| `controllers/upiVerificationController.ts` | Admin controller: list/verify/reject UPI payments |
-| `controllers/productImageAuditController.ts` | Admin controller: audit + deactivate imageless products |
-| `routes/adminUpiRoutes.ts` | Express routes for admin UPI verification |
+## Frontend files changed
 
----
+### `components/payment/UpiPaymentModal.tsx`
+**What changed:**
+- Switched QR image rendering from `object-contain` to `object-cover` + a computed `object-position` and CSS `scale()` transform, tuned to the measured crop region (left 11.2% / right 88.7% / top 35.9% / bottom 70.6%) of the current 716×1600px source screenshots.
+- Increased the QR container from a fixed 192×192px to a responsive `min(78vw, 320px)` square.
+- Both primary and secondary UPI IDs are now always visible and independently copyable, with a visual indicator of which is active.
+- Added a `QR_IMAGES_ARE_PRECROPPED` flag (currently `false`) — a one-line switch to disable the zoom-transform once clean, pre-cropped square QR images are supplied.
+- Submission logic (`handleSubmit`, field names, endpoint, response parsing) is byte-for-byte unchanged from the prior round.
 
-## FILES MODIFIED (drop-in replacements required)
+### `components/home/HeroSection.tsx`
+**What changed:** Replaced `cta1Link.includes('book')` substring matching with an explicit `BOOKING_POPUP_LINKS` Set containing only `/book-appointment`. Default/common-case behavior (admin never edits the CTA link) is unchanged.
 
-### Frontend — locate and update these patterns
+### `components/common/AppointmentPopup.tsx`
+**What changed:** Added a `loadError` state and a visible in-modal "Retry" button shown when `GET /services` fails, replacing the previous toast-only (and effectively unrecoverable) failure UI. Razorpay handler and UPI hook usage are unchanged from the prior round.
 
-**1. Service count text (TASK 1)**
-Search for `"100+"` or `"100+ Services"` in:
-- `components/Hero.tsx` or `components/HeroSection.tsx`
-- `pages/index.tsx` or `app/page.tsx`
-- `components/Stats.tsx` or similar stats component
-- Any hardcoded string containing "100+ Services"
+### `app/(public)/vastu-store/[category]/CategoryClient.tsx`
+**What changed:** Added explicit `limit: 24` and `sort: '-createdAt'` query params to the product fetch, replacing reliance on the backend's implicit default limit.
 
-Change: `"100+ Services"` → `"25+ Services"`
-The `payment.config.ts` exports `serviceCount: "25+"` for programmatic use.
+## Database schema changes
+None.
 
-**2. Old UPI buttons (TASK 2)**
-Find any component rendering UPI payment buttons that called:
-- `vastuarya@upi`
-- `upi://pay?pa=vastuarya@upi`
-- `generateQR()`
-- `manualPayment()`
+## Endpoints changed
+None added or removed. `POST /api/payment/verify` response body gained one new field (`paymentStatus`); all other fields unchanged in shape and meaning. `GET /products` now receives explicit `limit`/`sort` query params from the category page where it previously sent none — the endpoint itself is unmodified and already supported these params.
 
-Replace with: `<ServicePaymentButtons>` component
+## Performance optimizations implemented
+- Explicit pagination limit on category page product fetch (see above).
 
-**3. Products listing page**
-Import `filterProductsWithImages` from `utils/productImageAudit.ts`
-and wrap your products array before rendering.
+## Performance items identified but NOT implemented this round (see REPORT.md "Issue F")
+- Render free-tier cold-start latency — infrastructure/billing decision, not a code fix
+- Seed-data product images not run through Cloudinary's automatic format/quality pipeline
+- No `next/image` usage in product card / listing components
 
----
+## Items identified but NOT deleted this round (destructive — see REPORT.md "Issue 7")
+- `controllers/upiVerificationController.ts` (dead code)
+- `models/UpiPayment.ts` at repo root (dead code)
+- `routes/adminUpiRoutes.ts` (dead code, never registered)
+- `components/common/UPIPaymentModal.tsx` (dead code, different architecture, unused)
 
-## FILES / CODE REMOVED
-
-| What was removed | Why |
-|-----------------|-----|
-| `vastuarya@upi` — all references | Invalid UPI ID — was causing "Invalid UPI ID" errors |
-| `upi://pay?pa=vastuarya@upi` | Invalid deep link |
-| Custom QR generation code (`generateQR`, `qrCode` variables) | Replaced by static QR images |
-| `manualPayment` functions using old UPI | Replaced by `UpiPaymentModal` |
-| `UPI_QR` hardcoded strings | Replaced by `payment.config.ts` |
-| `UPI_ID` hardcoded strings | Replaced by `payment.config.ts` |
-
----
-
-## UPI INTEGRATION SUMMARY
-
-### Before (broken)
-- UPI ID: `vastuarya@upi` — invalid, not a real VPA
-- Dynamic QR generation — was failing silently
-- No screenshot collection
-- No pending payment tracking
-- No admin verification step
-
-### After (fixed)
-- Primary UPI ID: `aryavartguna@ybl` (SBI - 3356) — verified working
-- Secondary UPI ID: `vastuarya@ybl` (IDBI - 9553) — verified working
-- Static QR images (your actual PhonePe QR codes uploaded directly)
-- Screenshot upload + reference ID on submission
-- Status: `UPI_PENDING` until admin manually verifies
-- Admin panel: `/admin/upi-payments` to list, verify, reject
-- Only after admin verification does status become `PAID`
-
-### Payment Status Flow
-```
-User clicks "Pay via UPI"
-  → UpiPaymentModal opens (QR + amount + UPI ID)
-  → User pays in their UPI app
-  → User uploads screenshot + fills name + phone
-  → POST /api/payment/upi-pending
-  → Status: UPI_PENDING (DB record created)
-  → User sees Reference ID
-
-Admin logs in
-  → Checks /admin/upi-payments
-  → Reviews screenshot
-  → Clicks "Verify"
-  → POST /admin/upi-payments/:id/verify
-  → Status: PAID
-  → Booking/Order activated
-```
-
----
-
-## PRODUCT IMAGE AUDIT SUMMARY
-
-### Changes
-- Products with `null`, `""`, or placeholder image fields: hidden from storefront
-- Products are NOT deleted from database
-- `isActive: false` + `hiddenReason: "no_image"` set on affected products
-- Admin panel still shows all products including hidden ones
-- Storefront `/api/products` route applies `getImageFilter()` automatically
-
-### To run the audit
-```bash
-# Preview (no changes):
-curl -X GET /admin/products/audit-images
-
-# Execute (deactivates imageless products):
-curl -X POST /admin/products/audit-images
-```
-
----
-
-## RAZORPAY (UNCHANGED)
-- Razorpay Checkout button: untouched, continues working normally
-- Test mode fix: ensure `NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_live_...` in Vercel
-- All Razorpay webhook and signature verification from previous delivery: unchanged
+## Deployment notes
+- The `payment.controller.ts` fix is backend-only and is the highest-priority item — it unblocks the core revenue/booking confirmation path.
+- All frontend changes in this round are additive (new state, new query params, new CSS) — no breaking changes to existing component props or page behavior.
+- No environment variables, secrets, or Razorpay configuration were touched.

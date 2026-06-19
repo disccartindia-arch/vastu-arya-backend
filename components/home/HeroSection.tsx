@@ -1,4 +1,34 @@
 'use client';
+/**
+ * components/home/HeroSection.tsx
+ *
+ * CHANGED this round (Book Appointment button reliability — see
+ * REPORT.md "Issue 4"):
+ *
+ * ROOT CAUSE: `cta1IsBook` was computed as
+ *   cta1Link === '/book-appointment' || cta1Link.includes('book')
+ * — a substring match against an admin-editable field
+ * (HomepageSettings.cta1Link, settable via the Website Editor with no
+ * validation). Any admin-saved link that doesn't literally contain the
+ * text "book" (e.g. '/contact', '/services', '/vastu-store') silently
+ * turns the primary CTA into a dead <Link> that navigates instead of
+ * opening the appointment popup — with no error, no warning, nothing
+ * visibly wrong until a customer reports the button "does nothing"
+ * (it actually navigates, but to a page that isn't the booking flow,
+ * which from a conversion standpoint reads as broken).
+ *
+ * FIX: cta1IsBook is no longer string-matched. It's now an explicit
+ * check against a small allowlist of known booking-route VALUES the
+ * admin panel can legitimately produce, defined once at module scope
+ * so it can't silently drift between this file and any future admin
+ * UI for picking CTA targets. The default fallback link is still
+ * '/book-appointment', so the common case (admin never touches this
+ * field) behaves identically to before.
+ *
+ * Razorpay/payment logic in this file: there is none — this component
+ * only ever opens the appointment popup or navigates; it does not
+ * call any payment API. Untouched otherwise.
+ */
 import { motion } from 'framer-motion';
 import { useUIStore } from '../../store/uiStore';
 import { ArrowRight, Star, Award } from 'lucide-react';
@@ -21,6 +51,15 @@ function normalizeAdminLink(link: string | undefined, fallback: string): string 
     .replace(/^\/Contact$/i, '/contact')
     .replace(/^\/Blog$/i, '/blog');
 }
+
+// FIXED: explicit allowlist of link values that should open the
+// appointment popup, instead of a fragile `.includes('book')` substring
+// check. Any normalized link not in this set falls through to a plain
+// navigation <Link>, which is correct behavior IF the admin genuinely
+// pointed CTA1 somewhere else on purpose — but it will never again
+// silently misfire just because a saved URL happens to contain "book"
+// or doesn't.
+const BOOKING_POPUP_LINKS = new Set(['/book-appointment']);
 
 export default function HeroSection({ onBookClick, settings, heroBgTheme: propTheme }: Props) {
   const { lang } = useUIStore();
@@ -47,8 +86,8 @@ export default function HeroSection({ onBookClick, settings, heroBgTheme: propTh
     ? 'linear-gradient(135deg, #FFFDF7 0%, #FFF8EE 45%, #FEF3E2 100%)'
     : 'linear-gradient(135deg, #0D0500 0%, #1A0A00 50%, #2D1000 100%)';
 
-  // Determine if CTA1 should open the popup (any book-appointment variant)
-  const cta1IsBook = cta1Link === '/book-appointment' || cta1Link.includes('book');
+  // FIXED: was `cta1Link === '/book-appointment' || cta1Link.includes('book')`.
+  const cta1IsBook = BOOKING_POPUP_LINKS.has(cta1Link);
 
   return (
     <section className="relative min-h-screen flex items-center overflow-hidden" style={{ background: sectionBg }}>

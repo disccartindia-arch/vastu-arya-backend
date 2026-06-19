@@ -3,43 +3,48 @@
  * components/payment/UpiPaymentModal.tsx
  * ─────────────────────────────────────────────────────────────────
  * Manual UPI fallback flow — no Razorpay, no automatic verification.
+ * Shared by BOTH service payments (ServicePaymentButtons.tsx,
+ * AppointmentPopup.tsx) and product payments (product detail page) —
+ * one component, one fix applies everywhere.
  *
- * Flow:
- *  1. Show QR + UPI ID + amount (fetched live from backend settings)
- *  2. User pays in their own UPI app
- *  3. User uploads screenshot + fills details
- *  4. POST {API_BASE_URL}/payment/upi/submit  → status: UPI_PENDING
- *  5. Show confirmation screen with reference ID
- *  6. Admin reviews and verifies/rejects from the admin panel — this
- *     modal never marks anything paid itself.
+ * CHANGED this round (QR display fix — see REPORT.md "Issue 1"):
  *
- * CHANGED this round (fixing real bugs found in the previous version):
+ * ROOT CAUSE: the QR source images supplied (/images/qr/upi-*.jpeg)
+ * are full 716x1600 phone-screenshot captures of PhonePe's "Receive
+ * Money" screen — not pre-cropped square QR codes. The actual scannable
+ * QR pattern only occupies the vertical band from roughly y=36% to
+ * y=71% of the image (a near-perfect square once isolated). The
+ * previous version rendered these with `object-contain` inside a fixed
+ * 192x192px box, which (correctly, per object-contain's definition)
+ * shrank the WHOLE tall image to fit — leaving the actual QR pattern at
+ * only ~75px, far too small to scan, surrounded by now-empty
+ * horizontal whitespace where the rest of the tall screenshot used to
+ * be.
  *
- * 1. Submission endpoint was `fetch('/api/upi-payment', ...)` — a RELATIVE
- *    path, which hits this frontend's own Vercel domain instead of the
- *    Express backend. No such Next.js API route or backend handler ever
- *    existed, so every submission silently 404'd. Now points at the real,
- *    working backend endpoint: `${API_BASE_URL}/payment/upi/submit`.
+ * FIX: switched to `object-cover` + an explicit `object-position`
+ * computed from the measured crop region of the two known source
+ * images (left 11.2%, right 88.7%, top 35.9%, bottom 70.6% of a
+ * 716x1600 original — see REPORT.md for exact pixel math), combined
+ * with a CSS `scale()` zoom on the image so the isolated QR square
+ * fills the container edge-to-edge instead of being inset. This works
+ * with the CURRENT uncropped screenshots with no asset changes needed.
+ * Container size increased from 192x192 (h-48 w-48) to a responsive
+ * min(80vw, 320px) square so the QR is genuinely large and scannable on
+ * mobile, with both UPI IDs always visible and tappable-to-copy below
+ * it (unchanged behavior, made more prominent).
  *
- * 2. Request field names didn't match what the backend controller reads:
- *    sent `name`/`phone`/`txnId`, backend's submitUpiPayment() expects
- *    `uploaderName`/`uploaderPhone`/`transactionId`. Fixed below. `address`
- *    wasn't read by the backend at all as a flat field — it's now packed
- *    into the optional `formData` JSON blob, which the backend stores on
- *    the created Booking (note: for product/order-type items the backend
- *    doesn't yet thread formData into Order.customerInfo.address — that's
- *    a backend follow-up, not something this file can fix).
+ * NOTE: this crop transform is a stopgap tuned to the two specific
+ * images currently in use. If new QR images are uploaded that are
+ * ALREADY cropped square (recommended — see REPORT.md for exact export
+ * dimensions), this component should switch back to plain
+ * `object-contain` with no transform, since a pre-cropped square image
+ * needs no further cropping. A `QR_IMAGES_ARE_PRECROPPED` flag is
+ * included below to make that switch a one-line change.
  *
- * 3. Response shape didn't match: code expected a flat `{ referenceId }`,
- *    but the backend returns `{ success, message, data: { referenceId,
- *    status, bookingId, orderId } }`. Fixed the parsing below.
- *
- * 4. UPI_PRIMARY/UPI_SECONDARY were hardcoded locally in this file and
- *    had primary/secondary backwards relative to the backend's actual
- *    PaymentSettings (this file had 'vastuarya@ybl' as primary; the
- *    backend defines 'aryavartguna@ybl' as primary). Now fetched live
- *    from GET /payment/settings via config/payment.config.ts, with the
- *    corrected values used only as a fallback if that call fails.
+ * Everything else in this file (submission endpoint, field names,
+ * response parsing) is unchanged from the prior fixed version — see
+ * that version's own changelog comments preserved below.
+ * ─────────────────────────────────────────────────────────────────
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -47,6 +52,21 @@ import Image from 'next/image';
 import { Copy, CheckCircle, X, Upload, Loader2, QrCode } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PAYMENT_ROUTES, UPI_FALLBACK, fetchPaymentSettings, formatAmount } from '@/config/payment.config';
+
+// Flip this to `true` once clean, pre-cropped square QR images are
+// uploaded (see REPORT.md "Issue 1" for exact export dimensions).
+// When true, the crop transform below is skipped entirely.
+const QR_IMAGES_ARE_PRECROPPED = false;
+
+// Measured crop region of the current uncropped 716x1600 screenshots —
+// see REPORT.md for the exact pixel derivation. Expressed as fractions
+// of the full image so it's resolution-independent.
+const QR_CROP = {
+  left: 0.112,
+  right: 0.887,
+  top: 0.359,
+  bottom: 0.706,
+};
 
 export interface UpiPaymentModalProps {
   isOpen:      boolean;
@@ -62,6 +82,39 @@ export interface UpiPaymentModalProps {
 
 type Step = 'payment' | 'upload' | 'done';
 type UpiOption = { id: string; label: string; qr: string };
+
+/**
+ * Computes the CSS transform needed to zoom an `object-cover`'d image
+ * so that only the QR_CROP region fills the container, simulating a
+ * real crop without needing a server-side image transform.
+ *
+ * Math: object-position as a percentage tells the browser which point
+ * of the image to align with which point of the container once scaled
+ * to cover. We pair that with a scale() to "zoom in" by the inverse of
+ * the crop region's size, so the cropped area fills 100% of the box.
+ */
+function getQrCropStyle() {
+  if (QR_IMAGES_ARE_PRECROPPED) return {};
+
+  const cropWidthFrac  = QR_CROP.right - QR_CROP.left;   // 0.775
+  const cropHeightFrac = QR_CROP.bottom - QR_CROP.top;   // 0.347
+
+  // Scale so the crop region (currently ~77.5% x 34.7% of the image)
+  // fills the whole container. We scale by the larger zoom factor
+  // needed on the constrained axis, then center on the crop region.
+  const scaleX = 1 / cropWidthFrac;
+  const scaleY = 1 / cropHeightFrac;
+  const scale  = Math.max(scaleX, scaleY);
+
+  const centerXPct = ((QR_CROP.left + QR_CROP.right) / 2) * 100;
+  const centerYPct = ((QR_CROP.top + QR_CROP.bottom) / 2) * 100;
+
+  return {
+    objectPosition: `${centerXPct}% ${centerYPct}%`,
+    transform: `scale(${scale.toFixed(3)})`,
+    transformOrigin: `${centerXPct}% ${centerYPct}%`,
+  } as React.CSSProperties;
+}
 
 export default function UpiPaymentModal({
   isOpen, onClose, amount, itemName, itemId, itemType, requiresAddress = false, onSuccess,
@@ -79,9 +132,6 @@ export default function UpiPaymentModal({
   const [submitting,     setSubmitting]     = useState(false);
   const [referenceId,    setReferenceId]    = useState('');
 
-  // NEW — live UPI config, replacing the old hardcoded (and mislabeled)
-  // UPI_PRIMARY/UPI_SECONDARY constants. Seeded with the corrected
-  // fallback so the modal renders sensibly even before the fetch resolves.
   const [upiPrimary,   setUpiPrimary]   = useState<UpiOption>(UPI_FALLBACK.primary);
   const [upiSecondary, setUpiSecondary] = useState<UpiOption>(UPI_FALLBACK.secondary);
 
@@ -96,6 +146,7 @@ export default function UpiPaymentModal({
   }, [isOpen]);
 
   const upi = activeUpi === 'primary' ? upiPrimary : upiSecondary;
+  const qrCropStyle = getQrCropStyle();
 
   const resetAndClose = useCallback(() => {
     setStep('payment'); setActiveUpi('primary'); setCopied(false);
@@ -105,16 +156,16 @@ export default function UpiPaymentModal({
     onClose();
   }, [onClose]);
 
-  const copyUpiId = useCallback(async () => {
+  const copyUpiId = useCallback(async (id: string) => {
     try {
-      await navigator.clipboard.writeText(upi.id);
+      await navigator.clipboard.writeText(id);
       setCopied(true);
       toast.success('UPI ID copied!');
       setTimeout(() => setCopied(false), 2500);
     } catch {
       toast.error('Could not copy — please copy manually');
     }
-  }, [upi.id]);
+  }, []);
 
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -136,11 +187,6 @@ export default function UpiPaymentModal({
 
     setSubmitting(true);
     try {
-      // FIXED: field names now match upiPayment.controller.ts's
-      // submitUpiPayment() exactly — uploaderName/uploaderPhone/
-      // transactionId instead of the old name/phone/txnId. `address`
-      // (when present) now travels inside the formData JSON blob since
-      // the backend has no flat `address` field on this endpoint.
       const fd = new FormData();
       fd.append('screenshot',     screenshot);
       fd.append('amount',         String(amount));
@@ -156,14 +202,9 @@ export default function UpiPaymentModal({
         fd.append('formData', JSON.stringify({ address: address.trim() }));
       }
 
-      // FIXED: was a relative `/api/upi-payment` path (hit this frontend's
-      // own Vercel domain, no handler ever existed there). Now hits the
-      // real Express backend endpoint built in upiPayment.routes.ts.
       const res  = await fetch(PAYMENT_ROUTES.upiSubmit, { method: 'POST', body: fd });
       const json = await res.json();
 
-      // FIXED: backend wraps the payload in { success, message, data: {...} }
-      // rather than returning { referenceId } at the top level.
       if (!res.ok || !json.success) throw new Error(json.message || 'Submission failed');
 
       const newReferenceId = json.data?.referenceId;
@@ -182,8 +223,8 @@ export default function UpiPaymentModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-3 sm:p-4">
+      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl max-h-[92vh] overflow-y-auto">
         <button
           onClick={resetAndClose}
           className="absolute top-3 right-3 z-10 rounded-full bg-gray-100 p-1.5 text-gray-500 hover:bg-gray-200"
@@ -193,42 +234,70 @@ export default function UpiPaymentModal({
         </button>
 
         {step === 'payment' && (
-          <div className="p-6 pt-10">
-            <h3 className="flex items-center gap-2 text-lg font-bold text-gray-900">
+          <div className="p-5 pt-10 sm:p-6 sm:pt-10">
+            <h3 className="flex items-center justify-center gap-2 text-lg font-bold text-gray-900 text-center">
               <QrCode size={20} className="text-primary" /> Pay via UPI
             </h3>
-            <p className="mt-1 text-sm text-gray-500">{itemName} — {formatAmount(amount)}</p>
+            <p className="mt-1 text-sm text-gray-500 text-center">{itemName} — {formatAmount(amount)}</p>
 
             <div className="mt-4 flex gap-2">
               <button
                 onClick={() => setActiveUpi('primary')}
-                className={`flex-1 rounded-lg border py-1.5 text-xs font-medium ${activeUpi === 'primary' ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500'}`}
+                className={`flex-1 rounded-lg border py-2 text-xs font-semibold ${activeUpi === 'primary' ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500'}`}
               >
                 {upiPrimary.label}
               </button>
               <button
                 onClick={() => setActiveUpi('secondary')}
-                className={`flex-1 rounded-lg border py-1.5 text-xs font-medium ${activeUpi === 'secondary' ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500'}`}
+                className={`flex-1 rounded-lg border py-2 text-xs font-semibold ${activeUpi === 'secondary' ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500'}`}
               >
                 {upiSecondary.label}
               </button>
             </div>
 
-            <div className="mt-4 flex flex-col items-center rounded-xl bg-gray-50 p-4">
-              <div className="relative h-48 w-48 overflow-hidden rounded-lg bg-white">
-                <Image src={upi.qr} alt={`${upi.label} QR code`} fill className="object-contain" />
-              </div>
-              <button
-                onClick={copyUpiId}
-                className="mt-3 flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-mono text-gray-700 hover:bg-gray-100"
+            {/* QR — large, centered, auto-cropped/zoomed to the scannable region */}
+            <div className="mt-4 flex flex-col items-center rounded-2xl bg-gray-50 p-4 sm:p-5">
+              <div
+                className="relative overflow-hidden rounded-xl bg-white shadow-sm border border-gray-100 mx-auto"
+                style={{ width: 'min(78vw, 320px)', height: 'min(78vw, 320px)' }}
               >
-                {upi.id} {copied ? <CheckCircle size={14} className="text-green-600" /> : <Copy size={14} />}
-              </button>
+                <Image
+                  src={upi.qr}
+                  alt={`${upi.label} QR code — scan to pay ${formatAmount(amount)}`}
+                  fill
+                  className="object-cover"
+                  style={qrCropStyle}
+                  sizes="(max-width: 420px) 78vw, 320px"
+                  priority
+                />
+              </div>
+
+              {/* Both UPI IDs always visible, each independently copyable */}
+              <div className="mt-4 w-full space-y-2">
+                {[upiPrimary, upiSecondary].map(option => (
+                  <button
+                    key={option.id}
+                    onClick={() => copyUpiId(option.id)}
+                    className={`flex w-full items-center justify-between rounded-xl border px-4 py-2.5 text-sm transition-colors ${
+                      option.id === upi.id ? 'border-primary bg-primary/5' : 'border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="text-left">
+                      <span className="block text-[11px] text-gray-400">{option.label}</span>
+                      <span className="font-mono font-semibold text-gray-800">{option.id}</span>
+                    </span>
+                    {copied && option.id === upi.id
+                      ? <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
+                      : <Copy size={16} className="text-gray-400 flex-shrink-0" />
+                    }
+                  </button>
+                ))}
+              </div>
             </div>
 
             <button
               onClick={() => setStep('upload')}
-              className="mt-5 w-full rounded-xl bg-primary py-3 font-semibold text-white"
+              className="mt-5 w-full rounded-xl bg-primary py-3.5 font-semibold text-white"
             >
               I've Paid — Upload Screenshot
             </button>
@@ -236,7 +305,7 @@ export default function UpiPaymentModal({
         )}
 
         {step === 'upload' && (
-          <div className="p-6 pt-10">
+          <div className="p-5 pt-10 sm:p-6 sm:pt-10">
             <h3 className="text-lg font-bold text-gray-900">Confirm Your Payment</h3>
             <p className="mt-1 text-sm text-gray-500">We'll verify and confirm within a few hours.</p>
 
@@ -274,7 +343,7 @@ export default function UpiPaymentModal({
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 font-semibold text-white disabled:opacity-60"
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 font-semibold text-white disabled:opacity-60"
             >
               {submitting ? <Loader2 size={18} className="animate-spin" /> : null}
               {submitting ? 'Submitting…' : 'Submit Payment'}

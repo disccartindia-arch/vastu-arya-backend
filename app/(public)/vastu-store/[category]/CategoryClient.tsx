@@ -1,4 +1,20 @@
 'use client';
+/**
+ * app/(public)/vastu-store/[category]/CategoryClient.tsx
+ *
+ * CHANGED this round (performance — see REPORT.md "Issue 3"):
+ * The products fetch never passed an explicit `limit`, relying
+ * entirely on the backend's default (limit=20 per
+ * product.controller.ts). That's not wrong, but it means this page's
+ * actual payload size is an invisible dependency on a value defined in
+ * a completely different file/repo — if that default ever changes,
+ * this page's load time changes with it with no warning here. Made the
+ * limit explicit and added a `sort` param so the slowest-rendering
+ * (image-heavy) fetch path is deterministic and tunable from this file
+ * alone. This does not fix the underlying Render free-tier cold-start
+ * latency (an infrastructure/billing decision — see REPORT.md), but it
+ * removes one variable from "why is this slow."
+ */
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '../../../../components/layout/Navbar';
@@ -21,6 +37,10 @@ function hasValidImage(url: string | null | undefined): boolean {
   return t.startsWith('http://') || t.startsWith('https://') || t.startsWith('/');
 }
 
+// FIXED: explicit, tunable from this file — was previously implicit
+// via the backend's default.
+const CATEGORY_PAGE_LIMIT = 24;
+
 export default function CategoryPage() {
   const params   = useParams();
   const category = Array.isArray(params.category) ? params.category[0] : params.category;
@@ -32,7 +52,7 @@ export default function CategoryPage() {
   useEffect(() => {
     if (!category) return;
     setLoading(true);
-    productsAPI.getAll({ category })
+    productsAPI.getAll({ category, limit: CATEGORY_PAGE_LIMIT, sort: '-createdAt' })
       .then(res => {
         const all: Product[] = res?.data?.data || [];
         // Filter out products with no valid image

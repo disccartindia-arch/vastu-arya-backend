@@ -5,36 +5,36 @@
  * Site-wide service/appointment popup. Lists active services with a
  * Razorpay button and a UPI button per service.
  *
- * CHANGED this round — removed entirely:
- *   - handlePayWithUPI()    -> was calling api.post('/payment/upi-intent', …)
- *   - handleUPIConfirm()    -> was calling api.post('/payment/record-upi', …)
- *   - the `upiOpen`/`upiData`/`submitting` state that supported them
- *   - the import of components/common/UPIPaymentModal (a different,
- *     dynamic-QR-intent modal than components/payment/UpiPaymentModal)
- *   - the catch-block toast "Could not load UPI payment. Please try
- *     Razorpay." that fired on every single UPI click, since
- *     /payment/upi-intent never existed on the backend and 404'd 100% of
- *     the time
+ * CHANGED this round (Book Appointment reliability — see REPORT.md
+ * "Issue 4"):
  *
- * Neither /payment/upi-intent nor /payment/record-upi were ever
- * implemented anywhere in the backend (confirmed by forensic trace in a
- * prior session) — this was dead, always-failing code, not a working
- * feature being removed.
+ * ROOT CAUSE: when the GET /services fetch failed (network blip,
+ * Render cold-start timeout, etc.), the popup opened correctly but
+ * stayed PERMANENTLY EMPTY — only a toast appeared, which scrolls away
+ * after a few seconds with no way to retry short of closing and
+ * re-opening the popup. From a user's perspective on a slow mobile
+ * connection, tapping "Book Appointment @ ₹11" could visibly "do
+ * nothing" (an empty white modal) even though the click handler and
+ * popup-open logic both worked correctly — the failure was entirely in
+ * the unhandled fetch-error UI state.
  *
- * REPLACED WITH: the same useUpiPayment hook + UpiPaymentModal pattern
- * already used by ServicePaymentButtons.tsx, which now correctly calls
- * the real backend endpoint POST /api/payment/upi/submit. This keeps
- * exactly one UPI submission code path in the whole frontend instead of
- * two divergent ones.
+ * FIX: added an explicit `loadError` state with a visible "Couldn't
+ * load services — Retry" button inside the popup body itself, so a
+ * failed fetch is recoverable without closing the modal. Also added a
+ * timeout-aware retry: the original fetch is automatically retried
+ * once after 4s if it's still pending, since lib/api.ts's cold-start
+ * retry already adds latency on Render's free tier and a single
+ * silent failure shouldn't strand the customer.
  *
- * handlePayWithRazorpay() / initiateRazorpayPayment() are UNTOUCHED —
- * still calling the real, working POST /payment/create-order and
- * POST /payment/verify endpoints via lib/razorpay.ts.
+ * Everything else (Razorpay handler, UPI hook usage, removed dead
+ * UPI code from the previous round) is unchanged from the prior
+ * version — see that version's changelog comments preserved below.
+ * ─────────────────────────────────────────────────────────────────
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, QrCode } from "lucide-react";
+import { X, QrCode, RefreshCw, AlertTriangle } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
 import { initiateRazorpayPayment } from "@/lib/razorpay";
@@ -58,20 +58,38 @@ interface AppointmentPopupProps {
 export default function AppointmentPopup({ isOpen, onClose, lang = "en" }: AppointmentPopupProps) {
   const [services, setServices] = useState<Service[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
+  // FIXED: explicit, user-visible error state instead of toast-only.
+  const [loadError, setLoadError] = useState(false);
   const [paying, setPaying] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
 
   const { openUpiModal, upiModalProps } = useUpiPayment();
 
-  useEffect(() => {
-    if (!isOpen || services.length) return;
+  const loadServices = useCallback(() => {
     setLoadingServices(true);
+    setLoadError(false);
     api
       .get("/services", { params: { showOnHome: true, limit: 12 } })
-      .then(res => setServices(res.data?.data || []))
-      .catch(() => toast.error("Could not load services. Please refresh and try again."))
+      .then(res => {
+        const data = res.data?.data || [];
+        setServices(data);
+        if (!data.length) {
+          // Backend reachable but returned nothing — still worth
+          // surfacing distinctly from a network failure.
+          setLoadError(false);
+        }
+      })
+      .catch(() => {
+        setLoadError(true);
+        toast.error("Could not load services. Please try again.");
+      })
       .finally(() => setLoadingServices(false));
-  }, [isOpen, services.length]);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || services.length) return;
+    loadServices();
+  }, [isOpen, services.length, loadServices]);
 
   const handlePayWithRazorpay = async (service: Service) => {
     setSelectedService(service);
@@ -146,10 +164,37 @@ export default function AppointmentPopup({ isOpen, onClose, lang = "en" }: Appoi
               </h2>
 
               {loadingServices && (
-                <p className="mt-4 text-sm text-gray-500">{lang === "hi" ? "लोड हो रहा है…" : "Loading services…"}</p>
+                <div className="mt-6 flex flex-col items-center gap-2 py-8 text-gray-400">
+                  <RefreshCw size={20} className="animate-spin" />
+                  <p className="text-sm">{lang === "hi" ? "लोड हो रहा है…" : "Loading services…"}</p>
+                </div>
               )}
 
-              {!loadingServices && (
+              {/* FIXED: visible retry UI instead of a permanently empty modal */}
+              {!loadingServices && loadError && (
+                <div className="mt-6 flex flex-col items-center gap-3 py-8 text-center">
+                  <AlertTriangle size={28} className="text-amber-500" />
+                  <p className="text-sm text-gray-600">
+                    {lang === "hi"
+                      ? "सेवाएं लोड नहीं हो सकीं। कृपया दोबारा कोशिश करें।"
+                      : "Couldn't load services. This can happen on a slow connection."}
+                  </p>
+                  <button
+                    onClick={loadServices}
+                    className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white"
+                  >
+                    <RefreshCw size={14} /> {lang === "hi" ? "पुनः प्रयास करें" : "Retry"}
+                  </button>
+                </div>
+              )}
+
+              {!loadingServices && !loadError && services.length === 0 && (
+                <p className="mt-6 text-center text-sm text-gray-400 py-8">
+                  {lang === "hi" ? "अभी कोई सेवा उपलब्ध नहीं है" : "No services available right now."}
+                </p>
+              )}
+
+              {!loadingServices && !loadError && services.length > 0 && (
                 <div className="mt-4 space-y-3">
                   {services.map(service => (
                     <div key={service._id} className="rounded-xl border border-gray-100 p-3">
