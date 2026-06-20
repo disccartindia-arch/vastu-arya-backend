@@ -5,30 +5,47 @@
  * Site-wide service/appointment popup. Lists active services with a
  * Razorpay button and a UPI button per service.
  *
- * CHANGED this round (Book Appointment reliability — see REPORT.md
- * "Issue 4"):
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 3 — CRITICAL REGRESSION
+ * FIX, see BUTTON_AUDIT.md):
  *
- * ROOT CAUSE: when the GET /services fetch failed (network blip,
- * Render cold-start timeout, etc.), the popup opened correctly but
- * stayed PERMANENTLY EMPTY — only a toast appeared, which scrolls away
- * after a few seconds with no way to retry short of closing and
- * re-opening the popup. From a user's perspective on a slow mobile
- * connection, tapping "Book Appointment @ ₹11" could visibly "do
- * nothing" (an empty white modal) even though the click handler and
- * popup-open logic both worked correctly — the failure was entirely in
- * the unhandled fetch-error UI state.
+ * ROOT CAUSE OF "EVERY BOOK BUTTON ON THE SITE STOPPED WORKING":
+ * In Round 1, this component was rewritten to accept `isOpen` and
+ * `onClose` as REQUIRED PROPS, replacing its original behavior of
+ * managing its own visibility internally via useUIStore's
+ * `showAppointmentPopup` / `setShowAppointmentPopup`. That interface
+ * change was never propagated to any of the ~7 call sites across the
+ * codebase (HomeClient.tsx, AboutClient.tsx, ServicesClient.tsx,
+ * VastuStoreClient.tsx, CategoryClient.tsx, ServiceDetailPage,
+ * BookAppointmentClient.tsx) — every one of them renders
+ * `<AppointmentPopup />` with ZERO props, exactly as the ORIGINAL
+ * component required.
  *
- * FIX: added an explicit `loadError` state with a visible "Couldn't
- * load services — Retry" button inside the popup body itself, so a
- * failed fetch is recoverable without closing the modal. Also added a
- * timeout-aware retry: the original fetch is automatically retried
- * once after 4s if it's still pending, since lib/api.ts's cold-start
- * retry already adds latency on Render's free tier and a single
- * silent failure shouldn't strand the customer.
+ * With the Round 1 interface, `isOpen` was therefore always
+ * `undefined` at every call site, so `{isOpen && (...)}` never
+ * rendered — REGARDLESS of how many places in the app correctly called
+ * `setShowAppointmentPopup(true)`. Every "Book Appointment @ ₹11",
+ * "Book Now", "Book Consultation", and floating sticky button on the
+ * entire site was clicking a handler that correctly flipped a Zustand
+ * store value that this component had silently stopped listening to.
+ * This is why the buttons appeared completely dead with no console
+ * error: the click handlers all fired successfully, the state update
+ * happened successfully, nothing was actually broken except this one
+ * component no longer reading the state it used to read.
  *
- * Everything else (Razorpay handler, UPI hook usage, removed dead
- * UPI code from the previous round) is unchanged from the prior
- * version — see that version's changelog comments preserved below.
+ * FIX: reverted to self-managed visibility via useUIStore
+ * (`showAppointmentPopup` / `setShowAppointmentPopup`), so EVERY
+ * existing call site across the codebase — all of which render
+ * `<AppointmentPopup />` with no props — works correctly again with
+ * zero changes needed to any of those other files. The component now
+ * takes NO required props at all (an optional `lang` prop is kept for
+ * forward compatibility but is unused by any current call site).
+ *
+ * All of Round 1's actual improvements (the `loadError` retry UI for
+ * failed service fetches) are preserved unchanged below — only the
+ * visibility-control mechanism is reverted. The dead UPI code removal
+ * from Round 1 (UPIPaymentModal.tsx import deletion, handlePayWithUPI/
+ * handlePayWithUPIConfirm removal) is also preserved, since that part
+ * was correct and unrelated to this bug.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -40,6 +57,7 @@ import api from "@/lib/api";
 import { initiateRazorpayPayment } from "@/lib/razorpay";
 import UpiPaymentModal from "@/components/payment/UpiPaymentModal";
 import { useUpiPayment } from "@/hooks/useUpiPayment";
+import { useUIStore } from "@/store/uiStore";
 
 interface Service {
   _id: string;
@@ -49,16 +67,21 @@ interface Service {
   originalPrice: number;
 }
 
+// FIXED: no required props anymore. `lang` kept optional for forward
+// compatibility; every current call site renders <AppointmentPopup />
+// with no props at all, exactly like the rest of the codebase expects.
 interface AppointmentPopupProps {
-  isOpen: boolean;
-  onClose: () => void;
   lang?: "en" | "hi";
 }
 
-export default function AppointmentPopup({ isOpen, onClose, lang = "en" }: AppointmentPopupProps) {
+export default function AppointmentPopup({ lang = "en" }: AppointmentPopupProps) {
+  // FIXED: visibility is self-managed via the shared UI store again,
+  // matching every call site's expectation across the whole app.
+  const { showAppointmentPopup, setShowAppointmentPopup } = useUIStore();
+  const onClose = useCallback(() => setShowAppointmentPopup(false), [setShowAppointmentPopup]);
+
   const [services, setServices] = useState<Service[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
-  // FIXED: explicit, user-visible error state instead of toast-only.
   const [loadError, setLoadError] = useState(false);
   const [paying, setPaying] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -73,11 +96,6 @@ export default function AppointmentPopup({ isOpen, onClose, lang = "en" }: Appoi
       .then(res => {
         const data = res.data?.data || [];
         setServices(data);
-        if (!data.length) {
-          // Backend reachable but returned nothing — still worth
-          // surfacing distinctly from a network failure.
-          setLoadError(false);
-        }
       })
       .catch(() => {
         setLoadError(true);
@@ -87,9 +105,9 @@ export default function AppointmentPopup({ isOpen, onClose, lang = "en" }: Appoi
   }, []);
 
   useEffect(() => {
-    if (!isOpen || services.length) return;
+    if (!showAppointmentPopup || services.length) return;
     loadServices();
-  }, [isOpen, services.length, loadServices]);
+  }, [showAppointmentPopup, services.length, loadServices]);
 
   const handlePayWithRazorpay = async (service: Service) => {
     setSelectedService(service);
@@ -136,7 +154,7 @@ export default function AppointmentPopup({ isOpen, onClose, lang = "en" }: Appoi
   return (
     <>
       <AnimatePresence>
-        {isOpen && (
+        {showAppointmentPopup && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -170,7 +188,6 @@ export default function AppointmentPopup({ isOpen, onClose, lang = "en" }: Appoi
                 </div>
               )}
 
-              {/* FIXED: visible retry UI instead of a permanently empty modal */}
               {!loadingServices && loadError && (
                 <div className="mt-6 flex flex-col items-center gap-3 py-8 text-center">
                   <AlertTriangle size={28} className="text-amber-500" />

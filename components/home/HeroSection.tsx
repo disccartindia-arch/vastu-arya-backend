@@ -52,14 +52,22 @@ function normalizeAdminLink(link: string | undefined, fallback: string): string 
     .replace(/^\/Blog$/i, '/blog');
 }
 
-// FIXED: explicit allowlist of link values that should open the
-// appointment popup, instead of a fragile `.includes('book')` substring
-// check. Any normalized link not in this set falls through to a plain
-// navigation <Link>, which is correct behavior IF the admin genuinely
-// pointed CTA1 somewhere else on purpose — but it will never again
-// silently misfire just because a saved URL happens to contain "book"
-// or doesn't.
+// FIXED (Round 3 — see BUTTON_AUDIT.md): the Round 2 allowlist used an
+// exact Set.has() match, which is MORE fragile than the original
+// substring check for admin-saved links with different casing or
+// trailing whitespace (e.g. '/Book-Appointment', '/book-appointment ').
+// normalizeAdminLink() only canonicalizes a few KNOWN typo patterns
+// (Book-Now variants) — it does not canonicalize case/whitespace
+// variants of '/book-appointment' itself, so those fell through
+// unchanged and then failed the exact-match check, silently turning
+// the primary CTA into a dead navigation link. Now trims and
+// lowercases before comparing, while still being exact/intentional
+// (not a loose substring match) so it can't false-positive on an
+// unrelated admin-saved link that happens to contain "book".
 const BOOKING_POPUP_LINKS = new Set(['/book-appointment']);
+function isBookingPopupLink(link: string): boolean {
+  return BOOKING_POPUP_LINKS.has(link.trim().toLowerCase());
+}
 
 export default function HeroSection({ onBookClick, settings, heroBgTheme: propTheme }: Props) {
   const { lang } = useUIStore();
@@ -86,8 +94,9 @@ export default function HeroSection({ onBookClick, settings, heroBgTheme: propTh
     ? 'linear-gradient(135deg, #FFFDF7 0%, #FFF8EE 45%, #FEF3E2 100%)'
     : 'linear-gradient(135deg, #0D0500 0%, #1A0A00 50%, #2D1000 100%)';
 
-  // FIXED: was `cta1Link === '/book-appointment' || cta1Link.includes('book')`.
-  const cta1IsBook = BOOKING_POPUP_LINKS.has(cta1Link);
+  // FIXED: was `cta1Link === '/book-appointment' || cta1Link.includes('book')`,
+  // then a too-strict exact Set match in Round 2. Now case/whitespace-tolerant.
+  const cta1IsBook = isBookingPopupLink(cta1Link);
 
   return (
     <section className="relative min-h-screen flex items-center overflow-hidden" style={{ background: sectionBg }}>
