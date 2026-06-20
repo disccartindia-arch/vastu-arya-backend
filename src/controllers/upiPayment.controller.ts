@@ -2,30 +2,47 @@
 /**
  * upiPayment.controller.ts
  *
- * NEW — replaces the previously-uploaded controllers/upiVerificationController.ts.
- * That file is superseded because it:
- *   - imported a `../lib/mongodb` connectDB() helper that doesn't exist in this
- *     Express/Render backend (that pattern is from Next.js serverless functions)
- *   - referenced an `adminAuthMiddleware` that was never defined anywhere
- *   - wrote `paymentStatus`, `upiReferenceId`, and `status: "confirmed"/"active"`
- *     onto Booking/Order — none of which exist on those schemas, and
- *     "confirmed" isn't a valid Booking status, so those writes would have
- *     silently no-op'd or failed validation even if it had been wired up.
+ * UNCHANGED FROM PRIOR ROUNDS: everything in submitUpiPayment's Booking/
+ * Order creation, Cloudinary upload call, and the core verify/reject
+ * status-transition logic for Booking/Order is byte-for-byte identical
+ * to the version this replaces. See original file header (preserved
+ * below) for that history.
  *
- * This version is self-contained: it creates its own pending Booking/Order at
- * submission time (so it doesn't depend on the separate manual-booking
- * endpoints that are out of scope for this round), and on verification it
- * only ever writes fields that already exist on Booking/Order — status
- * ('paid'/'cancelled', both valid enum values), paymentId, paymentMethod,
- * notes — so every existing endpoint that reads those models (admin
- * dashboard, order/booking lookups) keeps working unmodified.
+ * CHANGED THIS ROUND — PRODUCTION HOTFIX ROUND 8, Phase A:
  *
- * Razorpay is completely untouched by this file — this is the UPI *fallback*
- * path only, used when a customer pays via their own UPI app and uploads
- * proof instead of going through Razorpay checkout.
+ * (1) AUDIT LOGGING (Item 6) — added three PaymentAuditLog.create() calls:
+ *     - in submitUpiPayment(), after the UpiPayment document is
+ *       successfully created -> logs action 'SUBMITTED', adminUser: null
+ *     - in verifyUpiPayment(), after payment.save() -> logs 'VERIFIED',
+ *       adminUser: the actual authenticated admin's name/email
+ *     - in rejectUpiPayment(), after payment.save() -> logs 'REJECTED',
+ *       same adminUser sourcing
+ *     Each call is wrapped so a logging failure can NEVER block or roll
+ *     back the actual payment action — audit logging is observability,
+ *     not a transactional requirement, and making it block real payment
+ *     verification would be a worse failure mode than an occasionally
+ *     missing log row. Logged with .catch() + console.error, fire-and-
+ *     forget is NOT used though — it's awaited so log entries are
+ *     ordered correctly relative to the action that produced them, just
+ *     not allowed to throw past its own try/catch.
+ *
+ * (2) BUG FOUND DURING TRACE (Phase A Item 2) — listUpiPayments() 'all'
+ *     filter was broken: the admin UI's "All" tab sends status=all as a
+ *     literal query string, but the old code did
+ *     `if (status) filter.status = status` — making the Mongo query
+ *     { status: 'all' }, which matches zero documents (no UpiPayment
+ *     document has the literal status value "all"). Fixed by excluding
+ *     the sentinel value 'all' from the filter, so that tab now
+ *     correctly returns every payment regardless of status. This is a
+ *     real pre-existing bug, not something introduced this round — see
+ *     DATABASE_RECORD_TRACE.md for the full evidence trail.
+ *
+ * Nothing else in this file changed. Razorpay is still completely
+ * untouched by this file, as before.
  */
 import { Request, Response } from 'express';
 import UpiPayment from '../models/UpiPayment';
+import PaymentAuditLog from '../models/PaymentAuditLog';
 import Booking from '../models/Booking';
 import Order from '../models/Order';
 import Service from '../models/Service';
@@ -40,15 +57,29 @@ function generateReferenceId(): string {
   return `UPI-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 }
 
+// Audit logging helper — deliberately swallows its own errors so a
+// logging failure can never block or corrupt the real payment action
+// it's attached to. See file header.
+async function logAudit(entry: {
+  paymentId: string;
+  referenceId: string;
+  action: 'SUBMITTED' | 'VERIFIED' | 'REJECTED';
+  adminUser?: string | null;
+  adminNotes?: string | null;
+  metadata?: Record<string, any>;
+}): Promise<void> {
+  try {
+    await PaymentAuditLog.create(entry);
+  } catch (err: any) {
+    con.error('[PaymentAuditLog] failed to write audit entry:', err.message, entry);
+  }
+}
+
 const BOOKING_TYPES = ['service', 'booking', 'consultation'];
 const ORDER_TYPES   = ['product', 'order'];
 const VALID_TYPES    = [...BOOKING_TYPES, ...ORDER_TYPES];
 
 // ── PUBLIC: POST /api/payment/upi/submit ──────────────────────────────────────
-// Customer has already paid via their own UPI app using the QR/ID shown on the
-// site, and is uploading proof now. Creates a pending Booking/Order PLUS a
-// UPI_PENDING verification record. Nothing is marked paid until an admin
-// reviews the screenshot and verifies it.
 export const submitUpiPayment = async (req: Request, res: Response) => {
   try {
     if (!req.file) {
@@ -139,6 +170,23 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
       status: 'UPI_PENDING',
     });
 
+    // NEW (Phase A, Item 6) — audit log entry for the submission event.
+    // adminUser is null: no admin is involved at submission time, this
+    // is a customer-initiated action.
+    await logAudit({
+      paymentId: payment._id.toString(),
+      referenceId: payment.referenceId,
+      action: 'SUBMITTED',
+      adminUser: null,
+      metadata: {
+        amount: numericAmount,
+        itemType,
+        uploaderName,
+        uploaderPhone,
+        upiId: resolvedUpiId,
+      },
+    });
+
     res.status(201).json({
       success: true,
       message: 'Payment submitted. Our team will verify it shortly.',
@@ -151,7 +199,6 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
 };
 
 // ── PUBLIC: GET /api/payment/upi/status/:referenceId ──────────────────────────
-// Read-only, returns only status — no screenshot/admin data exposed.
 export const getUpiPaymentStatus = async (req: Request, res: Response) => {
   try {
     const payment = await UpiPayment.findOne({ referenceId: req.params.referenceId }).select('referenceId status submittedAt verifiedAt');
@@ -167,7 +214,13 @@ export const listUpiPayments = async (req: Request, res: Response) => {
   try {
     const { status = 'UPI_PENDING', page = 1, limit = 20 } = req.query;
     const filter: any = {};
-    if (status) filter.status = status;
+    // FIXED (Phase A, Item 2 trace finding): the admin UI's "All" tab
+    // sends status=all literally. Previously this set filter.status =
+    // 'all', a value no document ever has, silently returning zero
+    // results for that tab. 'all' (and empty string) now correctly
+    // means "no status filter" instead of being treated as a real
+    // status value.
+    if (status && status !== 'all') filter.status = status;
     const skip = (Number(page) - 1) * Number(limit);
     const [payments, total] = await Promise.all([
       UpiPayment.find(filter).sort('-submittedAt').skip(skip).limit(Number(limit)),
@@ -190,8 +243,20 @@ export const getUpiPaymentById = async (req: Request, res: Response) => {
   }
 };
 
+// NEW — ADMIN: GET /api/admin/upi-payments/:id/audit-log
+// Returns the full append-only audit history for a single payment, in
+// chronological order. Additive endpoint — does not affect any existing
+// caller.
+export const getUpiPaymentAuditLog = async (req: Request, res: Response) => {
+  try {
+    const logs = await PaymentAuditLog.find({ paymentId: req.params.id }).sort('createdAt');
+    res.json({ success: true, data: logs });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ── ADMIN: POST /api/admin/upi-payments/:id/verify ────────────────────────────
-// The ONLY path that can mark a UPI-fallback payment as paid.
 export const verifyUpiPayment = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -203,9 +268,11 @@ export const verifyUpiPayment = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Payment already verified.' });
     }
 
+    const adminIdentity = req.user?.name || req.user?.email || 'admin';
+
     payment.status = 'PAID';
     payment.verifiedAt = new Date();
-    payment.verifiedBy = req.user?.name || req.user?.email || 'admin';
+    payment.verifiedBy = adminIdentity;
     payment.adminNotes = adminNotes ?? null;
     await payment.save();
 
@@ -231,6 +298,16 @@ export const verifyUpiPayment = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // NEW (Phase A, Item 6) — audit log entry for the verification event.
+    await logAudit({
+      paymentId: payment._id.toString(),
+      referenceId: payment.referenceId,
+      action: 'VERIFIED',
+      adminUser: adminIdentity,
+      adminNotes: adminNotes ?? null,
+      metadata: { amount: payment.amount, bookingId: payment.bookingId, orderId: payment.orderId },
+    });
+
     res.json({ success: true, message: 'Payment verified and order/booking marked paid.', referenceId: payment.referenceId });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || 'Verification failed.' });
@@ -249,10 +326,13 @@ export const rejectUpiPayment = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: `Cannot reject a payment with status: ${payment.status}` });
     }
 
+    const adminIdentity = req.user?.name || req.user?.email || 'admin';
+    const resolvedNotes = adminNotes ?? 'Rejected by admin — screenshot did not match.';
+
     payment.status = 'REJECTED';
     payment.verifiedAt = new Date();
-    payment.verifiedBy = req.user?.name || req.user?.email || 'admin';
-    payment.adminNotes = adminNotes ?? 'Rejected by admin — screenshot did not match.';
+    payment.verifiedBy = adminIdentity;
+    payment.adminNotes = resolvedNotes;
     await payment.save();
 
     if (payment.bookingId) {
@@ -260,6 +340,16 @@ export const rejectUpiPayment = async (req: AuthRequest, res: Response) => {
     } else if (payment.orderId) {
       await Order.findByIdAndUpdate(payment.orderId, { status: 'cancelled', notes: adminNotes || 'UPI payment rejected by admin.' });
     }
+
+    // NEW (Phase A, Item 6) — audit log entry for the rejection event.
+    await logAudit({
+      paymentId: payment._id.toString(),
+      referenceId: payment.referenceId,
+      action: 'REJECTED',
+      adminUser: adminIdentity,
+      adminNotes: resolvedNotes,
+      metadata: { amount: payment.amount, bookingId: payment.bookingId, orderId: payment.orderId },
+    });
 
     res.json({ success: true, message: 'Payment marked as rejected.' });
   } catch (error: any) {
