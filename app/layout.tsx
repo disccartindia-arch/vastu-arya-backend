@@ -12,8 +12,21 @@ const LuxuryBackground = dynamic(
   { ssr: false }
 );
 
+// CHANGED this round (PRODUCTION HOTFIX ROUND 4 — Task 4, Mobile UX /
+// unwanted zoom): added maximumScale: 1. Without this, iOS Safari
+// auto-zooms the entire page to fit any focused <input>/<textarea> whose
+// computed font-size is below 16px — and this codebase has several
+// (globals.css's .input-style is 14px; many components use Tailwind's
+// text-sm, also 14px, directly on inputs). Rewriting every input's font
+// size across the whole codebase would be a much larger, riskier change
+// for the same result — maximumScale: 1 is the standard, minimal,
+// root-cause fix recommended for exactly this Safari behavior.
+// userScalable is left at its default (enabled) so people who
+// deliberately want to pinch-zoom for accessibility still can — this
+// only stops the unwanted AUTOMATIC zoom on input focus, not manual
+// zoom, which nobody asked to remove.
 export const viewport: Viewport = {
-  width: 'device-width', initialScale: 1, themeColor: '#FF6B00',
+  width: 'device-width', initialScale: 1, maximumScale: 1, themeColor: '#FF6B00',
 };
 
 export const metadata: Metadata = {

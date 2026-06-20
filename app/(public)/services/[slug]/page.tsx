@@ -1,4 +1,18 @@
 'use client';
+/**
+ * app/(public)/services/[slug]/page.tsx
+ *
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 5 — requirements #3/#4):
+ * matches LeadGateModal's updated onSubmitted signature (now receives
+ * the full lead object instead of just an id string — see
+ * LeadGateModal.tsx and CHANGELOG.md). The lead's name/phone are now
+ * threaded into runRazorpay()'s orderData, replacing the previous
+ * hardcoded 'Customer' / '7000343804' placeholder values — the customer
+ * is never asked for this information twice.
+ *
+ * No other behavior on this page changed. The "Pay via UPI QR" button
+ * remains its own independent, ungated flow exactly as in Round 4.
+ */
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { notFound } from 'next/navigation';
@@ -9,8 +23,10 @@ import CartDrawer from '../../../../components/common/CartDrawer';
 import WhatsAppButton from '../../../../components/common/WhatsAppButton';
 import PriceDisplay from '../../../../components/common/PriceDisplay';
 import UpiPaymentModal from '../../../../components/payment/UpiPaymentModal';
+import LeadGateModal, { LeadGateContext, LeadData } from '../../../../components/leads/LeadGateModal';
 import { useUIStore } from '../../../../store/uiStore';
 import { servicesAPI } from '../../../../lib/api';
+import api from '../../../../lib/api';
 import { initiateRazorpayPayment } from '../../../../lib/razorpay';
 import { Service } from '../../../../types';
 import { CheckCircle, QrCode, CreditCard } from 'lucide-react';
@@ -23,6 +39,10 @@ export default function ServiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [paying,  setPaying]  = useState(false);
   const [upiOpen, setUpiOpen] = useState(false);
+
+  const [leadGateOpen, setLeadGateOpen] = useState(false);
+  // CHANGED: was `leadId: string | null`. Now the full lead object.
+  const [leadData, setLeadData] = useState<LeadData | null>(null);
 
   useEffect(() => {
     if (slug) {
@@ -41,16 +61,48 @@ export default function ServiceDetailPage() {
   const title       = lang === 'hi' && service.title.hi       ? service.title.hi       : service.title.en;
   const description = lang === 'hi' && service.description.hi ? service.description.hi : service.description.en;
 
-  const handleRazorpay = async () => {
-    if (service.slug === 'book-appointment') { setShowAppointmentPopup(true); return; }
+  const markLeadStatus = (status: 'PAID' | 'FAILED', paymentMethod?: 'razorpay') => {
+    if (!leadData) return;
+    api.patch(`/leads/${leadData._id}/status`, { status, paymentMethod }).catch(() => {});
+  };
+
+  const runRazorpay = async () => {
     setPaying(true);
     await initiateRazorpayPayment({
-      amount: service.offerPrice, name: 'Customer', phone: '7000343804',
+      amount: service.offerPrice,
+      // CHANGED: previously hardcoded 'Customer' / '7000343804'. Now
+      // uses the already-captured lead details — never asked twice.
+      name: leadData?.name || 'Customer',
+      phone: leadData?.phone || '7000343804',
       description: service.title.en, type: 'service',
-      orderData: { name: 'Customer', phone: '7000343804', serviceName: service.title.en, amount: service.offerPrice },
-      onSuccess: () => { setPaying(false); toast.success('Booking confirmed!'); },
-      onFailure: () => setPaying(false),
+      orderData: {
+        name: leadData?.name || 'Customer',
+        phone: leadData?.phone || '7000343804',
+        serviceName: service.title.en,
+        amount: service.offerPrice,
+      },
+      onSuccess: () => { markLeadStatus('PAID', 'razorpay'); setPaying(false); toast.success('Booking confirmed!'); },
+      onFailure: () => { markLeadStatus('FAILED', 'razorpay'); setPaying(false); },
     });
+  };
+
+  const handleRazorpay = () => {
+    if (service.slug === 'book-appointment') { setShowAppointmentPopup(true); return; }
+    setLeadGateOpen(true);
+  };
+
+  const leadContext: LeadGateContext = {
+    serviceName: service.title.en,
+    serviceId: service._id,
+    price: service.offerPrice,
+    sourcePage: typeof window !== 'undefined' ? window.location.pathname : 'unknown',
+  };
+
+  // CHANGED: matches LeadGateModal's new onSubmitted(lead) signature.
+  const handleLeadSubmitted = (lead: LeadData) => {
+    setLeadData(lead);
+    setLeadGateOpen(false);
+    runRazorpay();
   };
 
   return (
@@ -64,7 +116,6 @@ export default function ServiceDetailPage() {
             <h1 className="font-display text-4xl sm:text-5xl font-bold text-white mb-4">{title}</h1>
             <PriceDisplay original={service.originalPrice} offer={service.offerPrice} size="lg" />
 
-            {/* Payment buttons */}
             <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
               <button
                 onClick={handleRazorpay}
@@ -133,6 +184,13 @@ export default function ServiceDetailPage() {
       <AppointmentPopup />
       <CartDrawer />
       <WhatsAppButton />
+
+      <LeadGateModal
+        isOpen={leadGateOpen}
+        context={leadContext}
+        onClose={() => setLeadGateOpen(false)}
+        onSubmitted={handleLeadSubmitted}
+      />
 
       <UpiPaymentModal
         isOpen={upiOpen}

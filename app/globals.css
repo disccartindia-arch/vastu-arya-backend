@@ -71,12 +71,26 @@ body {
 .animate-twinkle { animation: starTwinkle 2s ease-in-out infinite; }
 
 .label-style { display:block; font-size:.8rem; font-weight:500; color:#5C3D1E; margin-bottom:4px; }
-.input-style { padding:8px 12px; border:1px solid #fed7aa; border-radius:10px; font-size:.875rem; outline:none; transition:border-color .2s; }
+/* CHANGED this round (PRODUCTION HOTFIX ROUND 4 — Task 4, Mobile UX /
+   unwanted zoom): font-size raised from .875rem (14px) to 1rem (16px).
+   14px is below the iOS Safari threshold that triggers automatic
+   page-zoom when an input is focused. 16px is the documented safe
+   minimum. This is defense-in-depth alongside the maximumScale: 1
+   viewport fix in app/layout.tsx — together they cover both the
+   viewport-level and font-size-level causes of this Safari behavior. */
+.input-style { padding:8px 12px; border:1px solid #fed7aa; border-radius:10px; font-size:1rem; outline:none; transition:border-color .2s; }
 .input-style:focus { border-color:#FF6B00; box-shadow:0 0 0 2px rgba(255,107,0,.1); }
 
 .bg-dark-gradient { background: linear-gradient(135deg, #0D0500 0%, #1A0A00 50%, #2D1000 100%); }
 .bg-hero-light { background: linear-gradient(135deg, #FFFDF7 0%, #FFF8EE 45%, #FEF3E2 100%); }
 .bg-saffron-gradient { background: linear-gradient(135deg, #FF6B00 0%, #FF9933 50%, #FFD700 100%); }
 .bg-cream { background-color: #FEFAF5; }
+
+/* NEW this round (Task 4): a reusable utility for ANY input not already
+   using Tailwind's text-base, guaranteeing the 16px iOS-safe floor
+   without needing to touch every individual component's className.
+   Apply alongside existing classes where needed, e.g.
+   className="...existing-classes... mobile-input-safe" */
+.mobile-input-safe { font-size: 16px !important; }
 
 @layer utilities { .text-balance { text-wrap: balance; } }

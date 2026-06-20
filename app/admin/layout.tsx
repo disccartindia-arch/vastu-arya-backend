@@ -6,14 +6,19 @@ import { useAuthStore } from '../../store/authStore';
 import {
   LayoutDashboard, Package, ShoppingBag, Calendar, BookOpen, Users,
   Settings, ImageIcon, MessageSquare, LogOut, Menu, X, Layers,
-  ChevronRight, Globe, Sparkles, Rss, Wand2, QrCode,
+  ChevronRight, Globe, Sparkles, Rss, Wand2, QrCode, UserPlus,
 } from 'lucide-react';
 
+// CHANGED this round (PRODUCTION HOTFIX ROUND 4 — Task 1, "Booking Leads"
+// admin panel requirement): added one new entry, 'Booking Leads', linking
+// to /admin/leads. Everything else in this array is unchanged from the
+// original file — same order, same hrefs, same icons, same badges.
 const navItems = [
   { href: '/admin',                    label: 'Dashboard',         icon: LayoutDashboard },
   { href: '/admin/website-editor',     label: 'Website Editor',    icon: Globe,         badge: 'NEW' },
   { href: '/admin/about',              label: 'About Page',        icon: Users,         badge: 'NEW' },
   { href: '/admin/ai-settings',        label: 'AI Vastu Settings', icon: Sparkles,      badge: 'NEW' },
+  { href: '/admin/leads',              label: 'Booking Leads',     icon: UserPlus,      badge: 'NEW' },
   { href: '/admin/upi-verifications',  label: 'UPI Payments',      icon: QrCode,        badge: 'NEW' },
   { href: '/admin/services',           label: 'Services',          icon: Layers },
   { href: '/admin/products',           label: 'Products',          icon: Package },

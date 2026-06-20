@@ -5,7 +5,10 @@ const en = {
     home: 'Home',
     vastuStore: 'Vastu Store',
     services: 'Services',
-    vastuFeed: '🌿 Vastu Feed',
+    // CHANGED this round (PRODUCTION HOTFIX ROUND 4 — Task 5, Navigation
+    // Cleanup): removed leaf emoji, renamed "Vastu Feed" → "Vastu Community"
+    // per explicit instruction.
+    vastuFeed: 'Vastu Community',
     vastuAI: '✨ AI Vastu',
     blog: 'Blog',
     about: 'About',
@@ -225,7 +228,10 @@ const en = {
     selectDirection: 'Select direction',
     minChars: 'Please describe your concern in at least 10 characters',
   },
-  // Vastu Feed
+  // Vastu Feed — NOTE: VastuFeedClient.tsx (the actual page) uses its own
+  // hardcoded copy, not these keys, so these are left as the original
+  // generic strings. See VastuFeedClient.tsx for this round's actual
+  // "Vastu Community" rename (Task 5).
   feed: {
     title: 'Vastu Remedies & Transformations',
     subtitle: 'Daily Vastu tips and sacred wisdom by Dr. PPS Tomar',

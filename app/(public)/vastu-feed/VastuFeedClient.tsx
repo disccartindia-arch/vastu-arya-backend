@@ -1,4 +1,22 @@
 'use client';
+/**
+ * app/(public)/vastu-feed/VastuFeedClient.tsx
+ *
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 4 — Task 5, Navigation
+ * Cleanup): this page's own hardcoded badge text dropped the 🌿 leaf
+ * emoji and now reads "Vastu Community" instead of "Live Vastu Feed",
+ * matching the nav rename in lib/i18n/en.ts / hi.ts. The page heading
+ * itself ("Vastu Remedies & Transformations") is left unchanged — Task 5
+ * specifically named the NAV LABEL ("Vastu Feed" → "Vastu Community") and
+ * the leaf icon for removal; the page's content heading is a different
+ * piece of copy describing what the page contains, not the navigation
+ * name itself, so it's left as-is to avoid an unrequested content
+ * rewrite. The route itself (/vastu-feed) is also left unchanged, since
+ * Task 5 did not ask for a URL change and changing it would break any
+ * existing external links/bookmarks/SEO for no stated benefit.
+ *
+ * No other logic in this file changed.
+ */
 import { useEffect, useState } from 'react';
 import Navbar from '../../../components/layout/Navbar';
 import Footer from '../../../components/layout/Footer';
@@ -37,7 +55,7 @@ export default function VastuFeedPage() {
     <section className="py-14 text-center relative overflow-hidden" style={{ background: 'linear-gradient(135deg,#0D0500,#1A0A00)' }}>
       <div className="absolute inset-0 mandala-bg opacity-10 pointer-events-none"/>
       <div className="relative max-w-xl mx-auto px-4">
-        <motion.div initial={{opacity:0,y:-12}} animate={{opacity:1,y:0}} className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium mb-5 border" style={{background:'rgba(212,160,23,0.15)',borderColor:'rgba(212,160,23,0.3)',color:'#D4A017'}}>🌿 Live Vastu Feed</motion.div>
+        <motion.div initial={{opacity:0,y:-12}} animate={{opacity:1,y:0}} className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium mb-5 border" style={{background:'rgba(212,160,23,0.15)',borderColor:'rgba(212,160,23,0.3)',color:'#D4A017'}}>Vastu Community</motion.div>
         <motion.h1 initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:0.1}} className="font-display text-3xl sm:text-4xl font-bold text-white mb-3">Vastu Remedies & Transformations</motion.h1>
         <motion.p initial={{opacity:0}} animate={{opacity:1}} transition={{delay:0.2}} className="text-gray-400 text-sm">Daily Vastu tips and sacred wisdom by Dr. PPS Tomar</motion.p>
       </div>

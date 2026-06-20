@@ -6,7 +6,10 @@ const hi: Translations = {
     home: 'होम',
     vastuStore: 'वास्तु स्टोर',
     services: 'सेवाएं',
-    vastuFeed: '🌿 वास्तु फ़ीड',
+    // CHANGED this round (PRODUCTION HOTFIX ROUND 4 — Task 5, Navigation
+    // Cleanup): removed leaf emoji, renamed to Hindi equivalent of
+    // "Vastu Community".
+    vastuFeed: 'वास्तु समुदाय',
     vastuAI: '✨ AI वास्तु',
     blog: 'ब्लॉग',
     about: 'हमारे बारे में',
