@@ -10,7 +10,7 @@
     "seed": "node -e \"require('dotenv').config(); require('ts-node').register(); require('./src/utils/seed.ts');\""
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0 <21.0.0"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
