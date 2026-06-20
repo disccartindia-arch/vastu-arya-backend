@@ -1,16 +1,15 @@
-DROP-IN INSTRUCTIONS — BACKEND_FIXED.zip (Round 2)
-====================================================
+CONSOLIDATED BACKEND — ALL 5 ROUNDS
+=====================================
+6 files. See CONSOLIDATED_CONTENTS.md (in the parent delivery) for the
+full per-file breakdown of which round each came from.
 
+Copy the entire src/ tree below into your backend repo, overwriting
+existing files at matching paths:
   src/controllers/payment.controller.ts
+  src/controllers/lead.controller.ts
+  src/models/Lead.ts
+  src/routes/lead.routes.ts
+  src/routes/adminLeads.routes.ts
+  src/server.ts
 
-This is the SAME fix from Round 1 (paymentStatus: 'paid' added to all
-3 success responses in verifyPayment()) — carried forward unchanged
-because it's still the active, correct fix and no backend issue was
-found this round that required further changes.
-
-If Round 1's backend zip is already deployed, this is a no-op redeploy.
-Included here so this round's frontend+backend ship as a complete,
-matched pair per your request.
-
-See REPORT.md, CHANGELOG.md, DEPLOYMENT_CHECKLIST.md in the parent
-delivery for full detail.
+No new env vars. No new npm packages.

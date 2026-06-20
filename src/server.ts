@@ -2,11 +2,13 @@
 /**
  * server.ts
  *
- * CHANGED this round: two new route groups registered —
- *   app.use('/api/payment/upi', upiPaymentRoutes)
- *   app.use('/api/admin/upi-payments', adminUpiPaymentsRoutes)
- * Everything else (middleware order, existing route registrations, CORS,
- * DB connection) is unchanged.
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 4 — Task 1, Lead Capture):
+ *   app.use('/api/leads', leadRoutes)
+ *   app.use('/api/admin/leads', adminLeadsRoutes)
+ * Both new route groups follow the exact same registration pattern as
+ * the UPI fallback routes added previously. Nothing else in this file
+ * changed — middleware order, existing route registrations, CORS, and
+ * DB connection are all byte-identical to before.
  */
 import express from 'express';
 import mongoose from 'mongoose';
@@ -35,9 +37,11 @@ import contentRoutes from './routes/content.routes';
 import aiRoutes from './routes/ai.routes';
 import aiSettingsRoutes from './routes/aiSettings.routes';
 import productGeneratorRoutes from './routes/productGenerator.routes';
-// NEW — UPI fallback payment flow
 import upiPaymentRoutes from './routes/upiPayment.routes';
 import adminUpiPaymentsRoutes from './routes/adminUpiPayments.routes';
+// NEW — Lead capture (pre-payment)
+import leadRoutes from './routes/lead.routes';
+import adminLeadsRoutes from './routes/adminLeads.routes';
 
 import { errorMiddleware } from './middleware/error.middleware';
 import { generalLimiter } from './middleware/rateLimit.middleware';
@@ -93,9 +97,12 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/ai-settings', aiSettingsRoutes);
 app.use('/api/product-generator', productGeneratorRoutes);
 
-// NEW — UPI fallback payment flow (verification system)
 app.use('/api/payment/upi', upiPaymentRoutes);
 app.use('/api/admin/upi-payments', adminUpiPaymentsRoutes);
+
+// NEW — Lead capture (pre-payment)
+app.use('/api/leads', leadRoutes);
+app.use('/api/admin/leads', adminLeadsRoutes);
 
 app.use(errorMiddleware);
 
