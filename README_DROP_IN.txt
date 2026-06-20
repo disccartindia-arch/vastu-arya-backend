@@ -1,13 +1,21 @@
-CONSOLIDATED FRONTEND — ALL 5 ROUNDS
-======================================
-16 files. See CONSOLIDATED_CONTENTS.md (in the parent delivery) for the
-full per-file breakdown of which round each came from.
+DROP-IN — FRONTEND_FIXED.zip (Round 7 — Issues 1, 2, 5)
+==========================================================
 
-Copy the entire tree below into your frontend repo, overwriting existing
-files at matching paths (lib/imageOptimize.ts, components/leads/, and
-app/admin/leads/ are new — everything else overwrites an existing file).
+OVERWRITE:
+  components/payment/UpiPaymentModal.tsx
+  app/admin/upi-verifications/page.tsx
 
-No new npm packages needed.
+NEW:
+  app/(public)/payment-submitted/PaymentSubmittedClient.tsx
+  app/(public)/payment-submitted/page.tsx
 
-DEPLOY BACKEND ZIP FIRST, then this one — the lead capture feature
-depends on the backend's new /api/leads routes existing.
+NO BACKEND CHANGES THIS ROUND — every backend file involved (Cloudinary
+upload, UpiPayment model, admin verify/reject controllers, route
+registration) was traced and confirmed already correct. The bugs were
+entirely in the frontend's upload reliability, the admin panel calling a
+dead route, and the UPI intent link's character encoding.
+
+See ROOT_CAUSE_REPORT.md, FIX_REPORT.md, TESTING_REPORT.md (delivered
+alongside this zip) for full evidence and a device-testing checklist —
+please run that checklist on real phones before considering this closed,
+since live UPI-app behavior can't be verified from this environment.
