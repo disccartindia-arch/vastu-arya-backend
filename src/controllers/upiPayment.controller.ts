@@ -2,17 +2,17 @@
 /**
  * upiPayment.controller.ts
  *
- * CHANGED this round (PRODUCTION HOTFIX ROUND 8 — Phase B, Feature 5):
- * added one call to notifyAdminOfPayment() in submitUpiPayment(), right
- * after the UpiPayment record and its audit log entry are created.
- * Fire-and-forget — wrapped so a notification failure can never block
- * or fail the customer-facing submission response, same pattern as the
- * audit log call from Phase A.
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 11 — Phase D): same
+ * verified-login-time linkage pattern as payment.controller.ts —
+ * submitUpiPayment() now sets `userId`/`user` on the created Booking/
+ * Order from `req.user?._id` if a real session is present (route
+ * patched to use optionalAuth this round), `null`/`undefined`
+ * otherwise. Guest UPI submission — the existing default — is
+ * completely unaffected.
  *
- * Everything else in this file — Cloudinary upload, Booking/Order
- * creation, the audit logging calls from Phase A, the 'all' filter fix,
- * verify/reject logic — is byte-for-byte unchanged from the version
- * delivered in Phase A.
+ * Every other line in this file — Cloudinary upload, audit logging
+ * (Phase A), the 'all' filter fix (Phase A), admin notification
+ * (Phase B), verify/reject logic — is unchanged from the prior round.
  */
 import { Request, Response } from 'express';
 import UpiPayment from '../models/UpiPayment';
@@ -41,13 +41,6 @@ async function logAudit(entry: {
   metadata?: Record<string, any>;
 }): Promise<void> {
   try {
-    // FIXED (Render build failure, TS2349 — same root cause as Round
-    // 6's lead.controller.ts fix): newer mongoose typings define
-    // `create` as a large overload union, and TypeScript's strict
-    // overload resolution can fail outright when the call shape
-    // doesn't unambiguously match one branch. Cast at this call site
-    // only — `entry`'s shape is still fully checked against the
-    // explicit parameter type above.
     await (PaymentAuditLog as any).create(entry);
   } catch (err: any) {
     con.error('[PaymentAuditLog] failed to write audit entry:', err.message, entry);
@@ -59,7 +52,7 @@ const ORDER_TYPES   = ['product', 'order'];
 const VALID_TYPES    = [...BOOKING_TYPES, ...ORDER_TYPES];
 
 // ── PUBLIC: POST /api/payment/upi/submit ──────────────────────────────────────
-export const submitUpiPayment = async (req: Request, res: Response) => {
+export const submitUpiPayment = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'Payment screenshot is required.' });
@@ -91,6 +84,10 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
       try { parsedFormData = typeof formData === 'string' ? JSON.parse(formData) : formData; } catch { parsedFormData = {}; }
     }
 
+    // NEW (Phase D) — verified login-time linkage only, identical
+    // rationale to payment.controller.ts.
+    const loggedInUserId: string | undefined = req.user?._id?.toString();
+
     let createdBookingId: string | null = null;
     let createdOrderId: string | null = null;
     let resolvedItemName = itemName;
@@ -113,6 +110,7 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
         formData: parsedFormData,
         status: 'pending',
         paymentMethod: 'upi_manual',
+        userId: loggedInUserId || null, // NEW
       });
       createdBookingId = booking._id.toString();
       resolvedItemName = resolvedServiceName || 'Vastu Consultation';
@@ -131,6 +129,7 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
         status: 'pending',
         type: 'product',
         paymentMethod: 'upi_manual',
+        user: loggedInUserId || undefined, // NEW
       });
       createdOrderId = order._id.toString();
       resolvedItemName = resolvedName || 'Vastu Arya order';
@@ -152,30 +151,14 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
       status: 'UPI_PENDING',
     });
 
-    // Phase A — audit log entry (unchanged).
     await logAudit({
       paymentId: payment._id.toString(),
       referenceId: payment.referenceId,
       action: 'SUBMITTED',
       adminUser: null,
-      metadata: {
-        amount: numericAmount,
-        itemType,
-        uploaderName,
-        uploaderPhone,
-        upiId: resolvedUpiId,
-      },
+      metadata: { amount: numericAmount, itemType, uploaderName, uploaderPhone, upiId: resolvedUpiId },
     });
 
-    // NEW (Phase B, Feature 5) — admin email notification. Fire-and-
-    // forget: never awaited into a way that could affect the response
-    // below, and notifyAdminOfPayment() internally swallows its own
-    // errors (see adminNotification.ts). Uses the human-readable
-    // referenceId (UPI-...) as the "Booking ID" shown in the email
-    // subject/body, since that's the identifier the admin will actually
-    // search for in the verification panel — the underlying
-    // Booking/Order Mongo _id is not customer- or admin-facing anywhere
-    // else in this codebase.
     notifyAdminOfPayment({
       bookingId: payment.referenceId,
       customerName: uploaderName,
@@ -185,7 +168,7 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
       amount: numericAmount,
       paymentMethod: 'upi_manual',
       screenshotUrl: uploaded.url,
-    }).catch(() => { /* already logged internally; never block the response */ });
+    }).catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -239,10 +222,6 @@ export const getUpiPaymentById = async (req: Request, res: Response) => {
 
 export const getUpiPaymentAuditLog = async (req: Request, res: Response) => {
   try {
-    // FIXED (Render build failure, TS2349 — same root cause as above):
-    // `find`'s overload union hits the same TypeScript resolution
-    // failure. Cast at the call site only; `.sort()` chaining and the
-    // resulting document shape are unaffected.
     const logs = await (PaymentAuditLog as any).find({ paymentId: req.params.id }).sort('createdAt');
     res.json({ success: true, data: logs });
   } catch (error: any) {

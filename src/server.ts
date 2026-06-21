@@ -2,33 +2,29 @@
 /**
  * server.ts
  *
- * CHANGED this round (PRODUCTION HOTFIX ROUND 8 — Phase B, Feature 4):
- *   app.use('/api/bookings/status', bookingStatusRoutes)
- * This is the ONLY change in this file. Mounted as a sibling to the
- * existing /api/bookings (admin-only, full CRUD) route group — note the
- * deliberate path distinction: /api/bookings/status/:id is the new
- * public, minimal-field, read-only endpoint; /api/bookings (no
- * /status segment) remains the existing admin-only booking.routes.ts,
- * completely untouched. Express resolves these correctly since
- * /api/bookings/status is registered as its own router mount, not a
- * route inside booking.routes.ts.
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 11 — Phase D): four new
+ * route mounts —
+ *   /api/account/claim    (accountClaim.routes.ts)
+ *   /api/account           (account.routes.ts)
+ *   /api/admin/customers   (adminCustomerLookup.routes.ts)
  *
- * ROUTING ORDER NOTE (caught during this round's own review, not a
- * pre-existing issue): Express matches mounted routers by path PREFIX
- * in REGISTRATION ORDER, not by specificity. Mounting
- * '/api/bookings/status' AFTER '/api/bookings' would mean every request
- * to /api/bookings/status/:id matches the EXISTING bookingRoutes router
- * first (since that path starts with '/api/bookings'), hitting its
- * GET /:id handler with id="status" instead of ever reaching the new
- * route. To avoid this, '/api/bookings/status' is mounted BEFORE
- * '/api/bookings' below — Express tries mounts in registration order,
- * so the more specific path now gets first chance to match. The
- * existing '/api/bookings' router (admin CRUD) is completely unaffected
- * by this reordering — it still matches everything it did before, just
- * after the new, more specific mount has had first refusal.
+ * MOUNT ORDER — verified explicitly against every existing mount in
+ * this file, not assumed safe by pattern-matching alone (full
+ * reasoning in this round's IMPLEMENTATION_REPORT.md):
+ *   - '/api/account/claim' and '/api/account' don't collide with any
+ *     EXISTING mount (no existing prefix is a prefix of '/api/account').
+ *     Between the two new account mounts themselves, order isn't
+ *     actually load-bearing (different HTTP methods), but
+ *     accountClaimRoutes is still mounted first as defensive practice.
+ *   - '/api/admin/customers' DOES share a prefix with the existing
+ *     '/api/admin' mount (adminRoutes) — same shape as the original
+ *     bookingStatus-vs-bookings bug. Mounted BEFORE the general
+ *     '/api/admin' here, consistent with how '/api/admin/upi-payments'
+ *     and '/api/admin/leads' were already correctly ordered ahead of
+ *     it in prior rounds.
  *
  * Every other route registration, middleware, CORS config, and the DB
- * connection block are byte-identical to the Phase A version of this
+ * connection block are byte-identical to the Phase C version of this
  * file.
  */
 import express from 'express';
@@ -62,8 +58,11 @@ import upiPaymentRoutes from './routes/upiPayment.routes';
 import adminUpiPaymentsRoutes from './routes/adminUpiPayments.routes';
 import leadRoutes from './routes/lead.routes';
 import adminLeadsRoutes from './routes/adminLeads.routes';
-// NEW — Phase B, Feature 4: public booking status lookup
 import bookingStatusRoutes from './routes/bookingStatus.routes';
+// NEW — Phase D
+import accountClaimRoutes from './routes/accountClaim.routes';
+import accountRoutes from './routes/account.routes';
+import adminCustomerLookupRoutes from './routes/adminCustomerLookup.routes';
 
 import { errorMiddleware } from './middleware/error.middleware';
 import { generalLimiter } from './middleware/rateLimit.middleware';
@@ -99,10 +98,13 @@ app.use('/api', generalLimiter);
 app.get('/health', (req, res) => res.json({ success: true, status: 'ok', timestamp: new Date().toISOString() }));
 app.get('/api/health', (req, res) => res.json({ success: true, status: 'ok', timestamp: new Date().toISOString() }));
 
-// NEW — Phase B, Feature 4: GET /api/bookings/status/:bookingId
-// Mounted BEFORE /api/bookings (see routing order note above) so this
-// more specific path is matched first.
+// Most-specific-prefix mounts first — see file header.
 app.use('/api/bookings/status', bookingStatusRoutes);
+app.use('/api/account/claim', accountClaimRoutes); // NEW
+app.use('/api/account', accountRoutes);             // NEW
+app.use('/api/admin/customers', adminCustomerLookupRoutes); // NEW
+app.use('/api/admin/upi-payments', adminUpiPaymentsRoutes);
+app.use('/api/admin/leads', adminLeadsRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -125,10 +127,8 @@ app.use('/api/ai-settings', aiSettingsRoutes);
 app.use('/api/product-generator', productGeneratorRoutes);
 
 app.use('/api/payment/upi', upiPaymentRoutes);
-app.use('/api/admin/upi-payments', adminUpiPaymentsRoutes);
 
 app.use('/api/leads', leadRoutes);
-app.use('/api/admin/leads', adminLeadsRoutes);
 
 app.use(errorMiddleware);
 

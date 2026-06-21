@@ -1,26 +1,24 @@
 /**
  * src/models/Booking.ts
  *
- * CHANGED this round (PRODUCTION HOTFIX ROUND 9 — Phase C Part 1):
- * two new enum values added to the existing two-axis status fields
- * introduced in Phase B — 'refunded' on paymentStatus, 'in_progress'
- * on bookingStatus. Per the approved Phase C audit (Blocker 2), no
- * existing enum value is renamed or removed: payment.controller.ts and
- * upiPayment.controller.ts both already write 'verified'/'confirmed'
- * etc. in production, and renaming those would be a breaking change to
- * already-live code for a purely cosmetic match to Phase C's brief
- * vocabulary (which is instead handled at the UI display-label layer,
- * not the stored-value layer).
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 11 — Phase D, approved
+ * User Linkage Strategy): one new additive field, `userId`.
  *
- * The pre-save derivation hook (Phase B) is unchanged — it still only
- * ever derives the ORIGINAL five `status` values into the original
- * paymentStatus/bookingStatus values; it never derives into 'refunded'
- * or 'in_progress', since those are exclusively admin-driven
- * transitions with no equivalent in the legacy single-axis `status`
- * field. This is intentional: the hook's job is backward-compatible
- * inference for documents that predate the two-axis model, not
- * forward-looking guesses about new states it can't actually observe
- * from the old field.
+ * Set in exactly two ways, both verified-identity paths — never by
+ * automatic phone/email matching, per your explicit modification to
+ * the linkage strategy:
+ *   1. At creation time, if the request carries a valid logged-in
+ *      session (payment.controller.ts / upiPayment.controller.ts, both
+ *      patched this round to pass req.user?._id through if present).
+ *   2. Via the new POST /api/account/claim endpoint
+ *      (accountClaim.controller.ts), which requires the customer to
+ *      supply the exact bookingId, phone, and (if the booking has one)
+ *      email — never inferred, never bulk-matched.
+ *
+ * Every existing Booking document has this field unset
+ * (undefined/null) until one of the above two paths explicitly sets
+ * it. No migration, no backfill — exactly the same additive pattern
+ * used for paymentStatus/bookingStatus in Phase B.
  */
 import mongoose, { Document, Schema } from 'mongoose';
 
@@ -46,17 +44,19 @@ export interface IBooking extends Document {
   paymentId?: string;
   razorpayOrderId?: string;
   paymentMethod?: 'razorpay' | 'upi_manual';
-
-  // EXISTING — untouched, remains the single source of truth for every
-  // pre-Phase-B read/write path in this codebase.
   status: string;
-
-  // Phase B — now with two new additive values each (see file header).
   paymentStatus: PaymentStatus;
   bookingStatus: BookingStatus;
-
   notes?: string;
   whatsappSent: boolean;
+
+  // NEW — Phase D. Optional, unset by default. ObjectId of the linked
+  // User, stored as a string for consistency with how this codebase
+  // already stores other Mongo references as strings elsewhere
+  // (UpiPayment.bookingId, StatusAuditLog.bookingId, etc.) rather than
+  // a true Mongoose ref — this matches the existing project convention
+  // rather than introducing a new pattern.
+  userId?: string | null;
 
   createdAt: Date;
   updatedAt: Date;
@@ -78,33 +78,26 @@ const BookingSchema = new Schema<IBooking>({
 
   paymentStatus: {
     type: String,
-    enum: ['pending', 'submitted', 'verified', 'rejected', 'refunded'], // 'refunded' NEW this round
+    enum: ['pending', 'submitted', 'verified', 'rejected', 'refunded'],
     default: 'pending',
   },
   bookingStatus: {
     type: String,
-    enum: ['pending_payment', 'payment_submitted', 'confirmed', 'consultation_scheduled', 'in_progress', 'completed', 'cancelled'], // 'in_progress' NEW this round
+    enum: ['pending_payment', 'payment_submitted', 'confirmed', 'consultation_scheduled', 'in_progress', 'completed', 'cancelled'],
     default: 'pending_payment',
   },
 
   notes: { type: String },
   whatsappSent: { type: Boolean, default: false },
+
+  // NEW — Phase D
+  userId: { type: String, default: null, index: true },
 }, { timestamps: true });
 
-/**
- * UNCHANGED from Phase B — see that round's notes for full rationale.
- * Still only fires when paymentStatus/bookingStatus weren't explicitly
- * set on this save, and still only ever derives the original five
- * legacy `status` values — never 'refunded' or 'in_progress', which
- * have no legacy equivalent and are only ever set explicitly by the
- * new updateBookingStatus() logic (Phase C Part 1).
- */
 BookingSchema.pre('save', function (next) {
   const doc = this as unknown as IBooking;
-
   const statusUntouched =
     !doc.isModified('paymentStatus') && !doc.isModified('bookingStatus');
-
   if (statusUntouched) {
     switch (doc.status) {
       case 'pending':
@@ -128,7 +121,6 @@ BookingSchema.pre('save', function (next) {
         break;
     }
   }
-
   next();
 });
 

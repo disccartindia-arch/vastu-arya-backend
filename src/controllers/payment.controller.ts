@@ -1,28 +1,30 @@
 /**
  * src/controllers/payment.controller.ts
  *
- * CHANGED this round (PRODUCTION HOTFIX ROUND 8 — Phase B, Feature 5 +
- * database readiness):
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 11 — Phase D, User
+ * Linkage Strategy Part 1 — verified login-time linkage):
  *
- * (1) Added notifyAdminOfPayment() calls in both the booking/service and
- *     product success branches of verifyPayment() — fire-and-forget,
- *     same pattern as upiPayment.controller.ts, never blocks or affects
- *     the response.
+ * Both the booking/service and product success branches of
+ * verifyPayment() now set `userId`/`user` directly from `req.user?._id`
+ * — but ONLY if a real, JWT-verified session is present on the
+ * request. This requires the route to run through `optionalAuth`
+ * (added in payment.routes.ts this round) rather than no auth
+ * middleware at all — `optionalAuth` populates `req.user` if a valid
+ * token is present, but does NOT reject the request if one isn't
+ * (existing guest checkout, which this codebase has always supported,
+ * continues to work completely unchanged).
  *
- * (2) The booking branch now also sets the new paymentStatus:'verified'
- *     and bookingStatus:'confirmed' fields on the created Booking
- *     document directly (rather than relying solely on the pre-save
- *     derivation hook in Booking.ts) — since this is a NEW document
- *     being created with status:'paid' already known at creation time,
- *     setting the new fields explicitly here is more precise than
- *     leaning on the hook's status->fields inference, though the hook
- *     would derive the same result if these were omitted.
+ * This is NOT phone/email matching of any kind — it is the verified-
+ * identity path from the approved User Linkage Strategy: if a
+ * customer happens to be logged in at the moment they complete a
+ * payment, the link is established directly from their authenticated
+ * session, with zero ambiguity. If they are not logged in (guest
+ * checkout, the existing default), no linkage is attempted here at
+ * all — that booking remains unclaimed until the customer uses the
+ * claim flow (accountClaim.controller.ts) later.
  *
- * The Razorpay HMAC signature verification, createOrder(), and the
- * `paymentStatus: 'paid'` field on the JSON response (added in an
- * earlier round, NOT to be confused with the new Booking-document-level
- * paymentStatus field of the same name — different things, see note
- * inline below) are completely untouched.
+ * The Razorpay HMAC signature verification, createOrder(), and every
+ * other line in this file are completely unchanged.
  */
 import { Request, Response } from 'express';
 import crypto from 'crypto';
@@ -31,6 +33,7 @@ import Order from '../models/Order';
 import Booking from '../models/Booking';
 import { sendEmail, bookingConfirmationEmail } from '../utils/email';
 import { notifyAdminOfPayment } from '../utils/adminNotification';
+import { AuthRequest } from '../middleware/auth.middleware';
 import { v4 as uuidv4 } from 'uuid';
 
 const getRazorpay = () => {
@@ -59,7 +62,7 @@ export const createOrder = async (req: Request, res: Response) => {
   }
 };
 
-export const verifyPayment = async (req: Request, res: Response) => {
+export const verifyPayment = async (req: AuthRequest, res: Response) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderData, type } = req.body;
     const body = razorpay_order_id + '|' + razorpay_payment_id;
@@ -67,6 +70,11 @@ export const verifyPayment = async (req: Request, res: Response) => {
     if (expectedSignature !== razorpay_signature) {
       return res.status(400).json({ success: false, message: 'Payment verification failed' });
     }
+
+    // NEW (Phase D) — only set if a real authenticated session exists
+    // on this request (via optionalAuth). undefined otherwise, which
+    // Mongoose treats identically to the field being omitted.
+    const loggedInUserId: string | undefined = req.user?._id?.toString();
 
     if (type === 'booking' || type === 'service') {
       const bookingId = `BK${Date.now()}${Math.floor(Math.random() * 1000)}`;
@@ -81,14 +89,9 @@ export const verifyPayment = async (req: Request, res: Response) => {
         paymentId: razorpay_payment_id,
         razorpayOrderId: razorpay_order_id,
         status: 'paid',
-        // NEW (Phase B) — explicit set on the new two-axis fields. See
-        // file header note: this is the Booking-document field, distinct
-        // from the unrelated `paymentStatus: 'paid'` key in the JSON
-        // response below, which has existed since an earlier round and
-        // serves a different purpose (telling the FRONTEND the Razorpay
-        // call succeeded, not a database field).
         paymentStatus: 'verified',
         bookingStatus: 'confirmed',
+        userId: loggedInUserId || null, // NEW — verified login-time linkage only
       });
       if (orderData.email) {
         await sendEmail({
@@ -98,9 +101,6 @@ export const verifyPayment = async (req: Request, res: Response) => {
         });
       }
 
-      // NEW (Phase B, Feature 5) — admin notification for a Razorpay
-      // booking/service payment. Fire-and-forget, never blocks the
-      // response below.
       notifyAdminOfPayment({
         bookingId,
         customerName: orderData.name,
@@ -110,7 +110,7 @@ export const verifyPayment = async (req: Request, res: Response) => {
         amount: orderData.amount,
         paymentMethod: 'razorpay',
         screenshotUrl: null,
-      }).catch(() => { /* already logged internally */ });
+      }).catch(() => {});
 
       return res.json({ success: true, paymentStatus: 'paid', message: 'Booking confirmed!', data: { bookingId, paymentId: razorpay_payment_id } });
     }
@@ -127,10 +127,9 @@ export const verifyPayment = async (req: Request, res: Response) => {
         razorpayOrderId: razorpay_order_id,
         razorpaySignature: razorpay_signature,
         type: 'product',
+        user: loggedInUserId || undefined, // NEW — verified login-time linkage only; Order.user is a true ObjectId field, undefined (not null) so Mongoose leaves it genuinely unset rather than storing a null ObjectId
       });
 
-      // NEW (Phase B, Feature 5) — admin notification for a Razorpay
-      // product order.
       const itemSummary = Array.isArray(orderData.items) && orderData.items.length
         ? orderData.items.map((i: any) => i.name).join(', ')
         : 'Product order';
@@ -143,7 +142,7 @@ export const verifyPayment = async (req: Request, res: Response) => {
         amount: orderData.totalAmount,
         paymentMethod: 'razorpay',
         screenshotUrl: null,
-      }).catch(() => { /* already logged internally */ });
+      }).catch(() => {});
 
       return res.json({ success: true, paymentStatus: 'paid', message: 'Order placed successfully!', data: { orderId, paymentId: razorpay_payment_id } });
     }
