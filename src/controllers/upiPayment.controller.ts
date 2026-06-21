@@ -2,43 +2,17 @@
 /**
  * upiPayment.controller.ts
  *
- * UNCHANGED FROM PRIOR ROUNDS: everything in submitUpiPayment's Booking/
- * Order creation, Cloudinary upload call, and the core verify/reject
- * status-transition logic for Booking/Order is byte-for-byte identical
- * to the version this replaces. See original file header (preserved
- * below) for that history.
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 8 — Phase B, Feature 5):
+ * added one call to notifyAdminOfPayment() in submitUpiPayment(), right
+ * after the UpiPayment record and its audit log entry are created.
+ * Fire-and-forget — wrapped so a notification failure can never block
+ * or fail the customer-facing submission response, same pattern as the
+ * audit log call from Phase A.
  *
- * CHANGED THIS ROUND — PRODUCTION HOTFIX ROUND 8, Phase A:
- *
- * (1) AUDIT LOGGING (Item 6) — added three PaymentAuditLog.create() calls:
- *     - in submitUpiPayment(), after the UpiPayment document is
- *       successfully created -> logs action 'SUBMITTED', adminUser: null
- *     - in verifyUpiPayment(), after payment.save() -> logs 'VERIFIED',
- *       adminUser: the actual authenticated admin's name/email
- *     - in rejectUpiPayment(), after payment.save() -> logs 'REJECTED',
- *       same adminUser sourcing
- *     Each call is wrapped so a logging failure can NEVER block or roll
- *     back the actual payment action — audit logging is observability,
- *     not a transactional requirement, and making it block real payment
- *     verification would be a worse failure mode than an occasionally
- *     missing log row. Logged with .catch() + console.error, fire-and-
- *     forget is NOT used though — it's awaited so log entries are
- *     ordered correctly relative to the action that produced them, just
- *     not allowed to throw past its own try/catch.
- *
- * (2) BUG FOUND DURING TRACE (Phase A Item 2) — listUpiPayments() 'all'
- *     filter was broken: the admin UI's "All" tab sends status=all as a
- *     literal query string, but the old code did
- *     `if (status) filter.status = status` — making the Mongo query
- *     { status: 'all' }, which matches zero documents (no UpiPayment
- *     document has the literal status value "all"). Fixed by excluding
- *     the sentinel value 'all' from the filter, so that tab now
- *     correctly returns every payment regardless of status. This is a
- *     real pre-existing bug, not something introduced this round — see
- *     DATABASE_RECORD_TRACE.md for the full evidence trail.
- *
- * Nothing else in this file changed. Razorpay is still completely
- * untouched by this file, as before.
+ * Everything else in this file — Cloudinary upload, Booking/Order
+ * creation, the audit logging calls from Phase A, the 'all' filter fix,
+ * verify/reject logic — is byte-for-byte unchanged from the version
+ * delivered in Phase A.
  */
 import { Request, Response } from 'express';
 import UpiPayment from '../models/UpiPayment';
@@ -50,6 +24,7 @@ import Product from '../models/Product';
 import PaymentSettings from '../models/PaymentSettings';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { uploadToCloudinary } from '../routes/upload.routes';
+import { notifyAdminOfPayment } from '../utils/adminNotification';
 
 const con = (console as any);
 
@@ -57,9 +32,6 @@ function generateReferenceId(): string {
   return `UPI-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 }
 
-// Audit logging helper — deliberately swallows its own errors so a
-// logging failure can never block or corrupt the real payment action
-// it's attached to. See file header.
 async function logAudit(entry: {
   paymentId: string;
   referenceId: string;
@@ -114,6 +86,7 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
 
     let createdBookingId: string | null = null;
     let createdOrderId: string | null = null;
+    let resolvedItemName = itemName;
 
     if (BOOKING_TYPES.includes(itemType)) {
       let resolvedServiceName = itemName;
@@ -135,6 +108,7 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
         paymentMethod: 'upi_manual',
       });
       createdBookingId = booking._id.toString();
+      resolvedItemName = resolvedServiceName || 'Vastu Consultation';
     } else {
       let resolvedName = itemName;
       if (!resolvedName && itemId) {
@@ -152,6 +126,7 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
         paymentMethod: 'upi_manual',
       });
       createdOrderId = order._id.toString();
+      resolvedItemName = resolvedName || 'Vastu Arya order';
     }
 
     const referenceId = generateReferenceId();
@@ -170,9 +145,7 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
       status: 'UPI_PENDING',
     });
 
-    // NEW (Phase A, Item 6) — audit log entry for the submission event.
-    // adminUser is null: no admin is involved at submission time, this
-    // is a customer-initiated action.
+    // Phase A — audit log entry (unchanged).
     await logAudit({
       paymentId: payment._id.toString(),
       referenceId: payment.referenceId,
@@ -186,6 +159,26 @@ export const submitUpiPayment = async (req: Request, res: Response) => {
         upiId: resolvedUpiId,
       },
     });
+
+    // NEW (Phase B, Feature 5) — admin email notification. Fire-and-
+    // forget: never awaited into a way that could affect the response
+    // below, and notifyAdminOfPayment() internally swallows its own
+    // errors (see adminNotification.ts). Uses the human-readable
+    // referenceId (UPI-...) as the "Booking ID" shown in the email
+    // subject/body, since that's the identifier the admin will actually
+    // search for in the verification panel — the underlying
+    // Booking/Order Mongo _id is not customer- or admin-facing anywhere
+    // else in this codebase.
+    notifyAdminOfPayment({
+      bookingId: payment.referenceId,
+      customerName: uploaderName,
+      phone: uploaderPhone,
+      email: email || null,
+      itemName: resolvedItemName,
+      amount: numericAmount,
+      paymentMethod: 'upi_manual',
+      screenshotUrl: uploaded.url,
+    }).catch(() => { /* already logged internally; never block the response */ });
 
     res.status(201).json({
       success: true,
@@ -214,12 +207,6 @@ export const listUpiPayments = async (req: Request, res: Response) => {
   try {
     const { status = 'UPI_PENDING', page = 1, limit = 20 } = req.query;
     const filter: any = {};
-    // FIXED (Phase A, Item 2 trace finding): the admin UI's "All" tab
-    // sends status=all literally. Previously this set filter.status =
-    // 'all', a value no document ever has, silently returning zero
-    // results for that tab. 'all' (and empty string) now correctly
-    // means "no status filter" instead of being treated as a real
-    // status value.
     if (status && status !== 'all') filter.status = status;
     const skip = (Number(page) - 1) * Number(limit);
     const [payments, total] = await Promise.all([
@@ -243,10 +230,6 @@ export const getUpiPaymentById = async (req: Request, res: Response) => {
   }
 };
 
-// NEW — ADMIN: GET /api/admin/upi-payments/:id/audit-log
-// Returns the full append-only audit history for a single payment, in
-// chronological order. Additive endpoint — does not affect any existing
-// caller.
 export const getUpiPaymentAuditLog = async (req: Request, res: Response) => {
   try {
     const logs = await PaymentAuditLog.find({ paymentId: req.params.id }).sort('createdAt');
@@ -298,7 +281,6 @@ export const verifyUpiPayment = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // NEW (Phase A, Item 6) — audit log entry for the verification event.
     await logAudit({
       paymentId: payment._id.toString(),
       referenceId: payment.referenceId,
@@ -341,7 +323,6 @@ export const rejectUpiPayment = async (req: AuthRequest, res: Response) => {
       await Order.findByIdAndUpdate(payment.orderId, { status: 'cancelled', notes: adminNotes || 'UPI payment rejected by admin.' });
     }
 
-    // NEW (Phase A, Item 6) — audit log entry for the rejection event.
     await logAudit({
       paymentId: payment._id.toString(),
       referenceId: payment.referenceId,

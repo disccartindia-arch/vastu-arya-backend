@@ -2,13 +2,34 @@
 /**
  * server.ts
  *
- * CHANGED this round (PRODUCTION HOTFIX ROUND 4 — Task 1, Lead Capture):
- *   app.use('/api/leads', leadRoutes)
- *   app.use('/api/admin/leads', adminLeadsRoutes)
- * Both new route groups follow the exact same registration pattern as
- * the UPI fallback routes added previously. Nothing else in this file
- * changed — middleware order, existing route registrations, CORS, and
- * DB connection are all byte-identical to before.
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 8 — Phase B, Feature 4):
+ *   app.use('/api/bookings/status', bookingStatusRoutes)
+ * This is the ONLY change in this file. Mounted as a sibling to the
+ * existing /api/bookings (admin-only, full CRUD) route group — note the
+ * deliberate path distinction: /api/bookings/status/:id is the new
+ * public, minimal-field, read-only endpoint; /api/bookings (no
+ * /status segment) remains the existing admin-only booking.routes.ts,
+ * completely untouched. Express resolves these correctly since
+ * /api/bookings/status is registered as its own router mount, not a
+ * route inside booking.routes.ts.
+ *
+ * ROUTING ORDER NOTE (caught during this round's own review, not a
+ * pre-existing issue): Express matches mounted routers by path PREFIX
+ * in REGISTRATION ORDER, not by specificity. Mounting
+ * '/api/bookings/status' AFTER '/api/bookings' would mean every request
+ * to /api/bookings/status/:id matches the EXISTING bookingRoutes router
+ * first (since that path starts with '/api/bookings'), hitting its
+ * GET /:id handler with id="status" instead of ever reaching the new
+ * route. To avoid this, '/api/bookings/status' is mounted BEFORE
+ * '/api/bookings' below — Express tries mounts in registration order,
+ * so the more specific path now gets first chance to match. The
+ * existing '/api/bookings' router (admin CRUD) is completely unaffected
+ * by this reordering — it still matches everything it did before, just
+ * after the new, more specific mount has had first refusal.
+ *
+ * Every other route registration, middleware, CORS config, and the DB
+ * connection block are byte-identical to the Phase A version of this
+ * file.
  */
 import express from 'express';
 import mongoose from 'mongoose';
@@ -39,9 +60,10 @@ import aiSettingsRoutes from './routes/aiSettings.routes';
 import productGeneratorRoutes from './routes/productGenerator.routes';
 import upiPaymentRoutes from './routes/upiPayment.routes';
 import adminUpiPaymentsRoutes from './routes/adminUpiPayments.routes';
-// NEW — Lead capture (pre-payment)
 import leadRoutes from './routes/lead.routes';
 import adminLeadsRoutes from './routes/adminLeads.routes';
+// NEW — Phase B, Feature 4: public booking status lookup
+import bookingStatusRoutes from './routes/bookingStatus.routes';
 
 import { errorMiddleware } from './middleware/error.middleware';
 import { generalLimiter } from './middleware/rateLimit.middleware';
@@ -77,6 +99,11 @@ app.use('/api', generalLimiter);
 app.get('/health', (req, res) => res.json({ success: true, status: 'ok', timestamp: new Date().toISOString() }));
 app.get('/api/health', (req, res) => res.json({ success: true, status: 'ok', timestamp: new Date().toISOString() }));
 
+// NEW — Phase B, Feature 4: GET /api/bookings/status/:bookingId
+// Mounted BEFORE /api/bookings (see routing order note above) so this
+// more specific path is matched first.
+app.use('/api/bookings/status', bookingStatusRoutes);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/services', serviceRoutes);
@@ -100,7 +127,6 @@ app.use('/api/product-generator', productGeneratorRoutes);
 app.use('/api/payment/upi', upiPaymentRoutes);
 app.use('/api/admin/upi-payments', adminUpiPaymentsRoutes);
 
-// NEW — Lead capture (pre-payment)
 app.use('/api/leads', leadRoutes);
 app.use('/api/admin/leads', adminLeadsRoutes);
 

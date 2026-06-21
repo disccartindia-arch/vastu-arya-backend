@@ -1,24 +1,28 @@
 /**
  * src/controllers/payment.controller.ts
  *
- * FIXED (June 2026 forensic trace — see REPORT.md "Issue 6 & 2"):
- * verifyPayment()'s success responses never included a top-level
- * `paymentStatus` field, but lib/razorpay.ts's frontend handler gates
- * options.onSuccess() on `verifyRes.data.paymentStatus === 'paid'`.
- * Since that field was always undefined, the frontend ALWAYS fell into
- * its failure branch — showing "Payment could not be verified" and
- * never clearing the cart / redirecting — even though the Order or
- * Booking document was already correctly created here with a valid
- * Razorpay signature. This is the root cause of "payment success
- * without business success" (Issue 6) and "product orders not
- * appearing to be created" (Issue 2): the order WAS created, the
- * frontend just never found out.
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 8 — Phase B, Feature 5 +
+ * database readiness):
  *
- * The only change in this file vs the previously-uploaded version is
- * the addition of `paymentStatus: 'paid'` to both success response
- * objects below. Razorpay order-creation, signature verification (HMAC
- * check), and all database writes are completely untouched, per the
- * "do not break Razorpay" requirement.
+ * (1) Added notifyAdminOfPayment() calls in both the booking/service and
+ *     product success branches of verifyPayment() — fire-and-forget,
+ *     same pattern as upiPayment.controller.ts, never blocks or affects
+ *     the response.
+ *
+ * (2) The booking branch now also sets the new paymentStatus:'verified'
+ *     and bookingStatus:'confirmed' fields on the created Booking
+ *     document directly (rather than relying solely on the pre-save
+ *     derivation hook in Booking.ts) — since this is a NEW document
+ *     being created with status:'paid' already known at creation time,
+ *     setting the new fields explicitly here is more precise than
+ *     leaning on the hook's status->fields inference, though the hook
+ *     would derive the same result if these were omitted.
+ *
+ * The Razorpay HMAC signature verification, createOrder(), and the
+ * `paymentStatus: 'paid'` field on the JSON response (added in an
+ * earlier round, NOT to be confused with the new Booking-document-level
+ * paymentStatus field of the same name — different things, see note
+ * inline below) are completely untouched.
  */
 import { Request, Response } from 'express';
 import crypto from 'crypto';
@@ -26,6 +30,7 @@ import Razorpay from 'razorpay';
 import Order from '../models/Order';
 import Booking from '../models/Booking';
 import { sendEmail, bookingConfirmationEmail } from '../utils/email';
+import { notifyAdminOfPayment } from '../utils/adminNotification';
 import { v4 as uuidv4 } from 'uuid';
 
 const getRazorpay = () => {
@@ -76,6 +81,14 @@ export const verifyPayment = async (req: Request, res: Response) => {
         paymentId: razorpay_payment_id,
         razorpayOrderId: razorpay_order_id,
         status: 'paid',
+        // NEW (Phase B) — explicit set on the new two-axis fields. See
+        // file header note: this is the Booking-document field, distinct
+        // from the unrelated `paymentStatus: 'paid'` key in the JSON
+        // response below, which has existed since an earlier round and
+        // serves a different purpose (telling the FRONTEND the Razorpay
+        // call succeeded, not a database field).
+        paymentStatus: 'verified',
+        bookingStatus: 'confirmed',
       });
       if (orderData.email) {
         await sendEmail({
@@ -84,7 +97,21 @@ export const verifyPayment = async (req: Request, res: Response) => {
           html: bookingConfirmationEmail(orderData.name, orderData.serviceName, bookingId, orderData.amount)
         });
       }
-      // FIXED: added paymentStatus so frontend's onSuccess() actually fires.
+
+      // NEW (Phase B, Feature 5) — admin notification for a Razorpay
+      // booking/service payment. Fire-and-forget, never blocks the
+      // response below.
+      notifyAdminOfPayment({
+        bookingId,
+        customerName: orderData.name,
+        phone: orderData.phone,
+        email: orderData.email || null,
+        itemName: orderData.serviceName,
+        amount: orderData.amount,
+        paymentMethod: 'razorpay',
+        screenshotUrl: null,
+      }).catch(() => { /* already logged internally */ });
+
       return res.json({ success: true, paymentStatus: 'paid', message: 'Booking confirmed!', data: { bookingId, paymentId: razorpay_payment_id } });
     }
 
@@ -101,11 +128,26 @@ export const verifyPayment = async (req: Request, res: Response) => {
         razorpaySignature: razorpay_signature,
         type: 'product',
       });
-      // FIXED: added paymentStatus so frontend's onSuccess() actually fires.
+
+      // NEW (Phase B, Feature 5) — admin notification for a Razorpay
+      // product order.
+      const itemSummary = Array.isArray(orderData.items) && orderData.items.length
+        ? orderData.items.map((i: any) => i.name).join(', ')
+        : 'Product order';
+      notifyAdminOfPayment({
+        bookingId: orderId,
+        customerName: orderData.customerInfo?.name || 'Unknown',
+        phone: orderData.customerInfo?.phone || 'N/A',
+        email: orderData.customerInfo?.email || null,
+        itemName: itemSummary,
+        amount: orderData.totalAmount,
+        paymentMethod: 'razorpay',
+        screenshotUrl: null,
+      }).catch(() => { /* already logged internally */ });
+
       return res.json({ success: true, paymentStatus: 'paid', message: 'Order placed successfully!', data: { orderId, paymentId: razorpay_payment_id } });
     }
 
-    // FIXED: also added here for the generic/unspecified type branch, for consistency.
     res.json({ success: true, paymentStatus: 'paid', message: 'Payment verified', data: { paymentId: razorpay_payment_id } });
   } catch (error: any) {
     console.error('Payment verify error:', error);
