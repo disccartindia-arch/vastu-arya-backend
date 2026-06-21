@@ -41,7 +41,14 @@ async function logAudit(entry: {
   metadata?: Record<string, any>;
 }): Promise<void> {
   try {
-    await PaymentAuditLog.create(entry);
+    // FIXED (Render build failure, TS2349 — same root cause as Round
+    // 6's lead.controller.ts fix): newer mongoose typings define
+    // `create` as a large overload union, and TypeScript's strict
+    // overload resolution can fail outright when the call shape
+    // doesn't unambiguously match one branch. Cast at this call site
+    // only — `entry`'s shape is still fully checked against the
+    // explicit parameter type above.
+    await (PaymentAuditLog as any).create(entry);
   } catch (err: any) {
     con.error('[PaymentAuditLog] failed to write audit entry:', err.message, entry);
   }
@@ -232,7 +239,11 @@ export const getUpiPaymentById = async (req: Request, res: Response) => {
 
 export const getUpiPaymentAuditLog = async (req: Request, res: Response) => {
   try {
-    const logs = await PaymentAuditLog.find({ paymentId: req.params.id }).sort('createdAt');
+    // FIXED (Render build failure, TS2349 — same root cause as above):
+    // `find`'s overload union hits the same TypeScript resolution
+    // failure. Cast at the call site only; `.sort()` chaining and the
+    // resulting document shape are unaffected.
+    const logs = await (PaymentAuditLog as any).find({ paymentId: req.params.id }).sort('createdAt');
     res.json({ success: true, data: logs });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
