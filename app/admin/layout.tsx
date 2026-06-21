@@ -1,4 +1,12 @@
 'use client';
+/**
+ * app/admin/layout.tsx
+ *
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 11 — Phase D): one new
+ * navItems entry, 'Customer Lookup', linking to /admin/customers.
+ * Everything else in this array and this file is byte-for-byte
+ * unchanged from the Phase C version.
+ */
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -6,13 +14,9 @@ import { useAuthStore } from '../../store/authStore';
 import {
   LayoutDashboard, Package, ShoppingBag, Calendar, BookOpen, Users,
   Settings, ImageIcon, MessageSquare, LogOut, Menu, X, Layers,
-  ChevronRight, Globe, Sparkles, Rss, Wand2, QrCode, UserPlus,
+  ChevronRight, Globe, Sparkles, Rss, Wand2, QrCode, UserPlus, UserSearch,
 } from 'lucide-react';
 
-// CHANGED this round (PRODUCTION HOTFIX ROUND 4 — Task 1, "Booking Leads"
-// admin panel requirement): added one new entry, 'Booking Leads', linking
-// to /admin/leads. Everything else in this array is unchanged from the
-// original file — same order, same hrefs, same icons, same badges.
 const navItems = [
   { href: '/admin',                    label: 'Dashboard',         icon: LayoutDashboard },
   { href: '/admin/website-editor',     label: 'Website Editor',    icon: Globe,         badge: 'NEW' },
@@ -20,6 +24,7 @@ const navItems = [
   { href: '/admin/ai-settings',        label: 'AI Vastu Settings', icon: Sparkles,      badge: 'NEW' },
   { href: '/admin/leads',              label: 'Booking Leads',     icon: UserPlus,      badge: 'NEW' },
   { href: '/admin/upi-verifications',  label: 'UPI Payments',      icon: QrCode,        badge: 'NEW' },
+  { href: '/admin/customers',          label: 'Customer Lookup',   icon: UserSearch,    badge: 'NEW' },
   { href: '/admin/services',           label: 'Services',          icon: Layers },
   { href: '/admin/products',           label: 'Products',          icon: Package },
   { href: '/admin/product-generator',  label: 'AI Product Gen',    icon: Wand2 },
