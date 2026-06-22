@@ -38,7 +38,7 @@ export const searchCustomers = async (req: Request, res: Response) => {
       Order.find({ $or: [{ 'customerInfo.name': re }, { 'customerInfo.phone': re }, { 'customerInfo.email': re }, { orderId: re }] })
         .sort('-createdAt').limit(25)
         .select('orderId customerInfo totalAmount status user createdAt'),
-      Lead.find({ $or: [{ name: re }, { phone: re }, { email: re }] })
+      (Lead as any).find({ $or: [{ name: re }, { phone: re }, { email: re }] }) // cast: Lead.find() has the same TS2349 union-type overload issue as other models in this project
         .sort('-createdAt').limit(25)
         .select('name phone email serviceName status createdAt'),
     ]);

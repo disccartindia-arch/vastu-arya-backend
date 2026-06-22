@@ -204,7 +204,7 @@ export const getMyPayments = async (req: AuthRequest, res: Response) => {
       .map(b => ({ reference: b.bookingId, amount: b.amount, status: b.paymentStatus, method: 'razorpay', date: b.createdAt, type: 'booking' }));
     const razorpayOrderPayments = myOrders
       .filter(o => o.paymentMethod === 'razorpay' || !o.paymentMethod)
-      .map(o => ({ reference: o.orderId, amount: o.totalAmount, status: o.status, method: 'razorpay', date: o.createdAt, type: 'order' }));
+      .map(o => ({ reference: o.orderId, amount: o.totalAmount, status: o.status, method: 'razorpay', date: (o as any).createdAt, type: 'order' })); // cast: IOrder doesn't declare createdAt explicitly even though timestamps:true generates it at runtime
     const upiFormatted = upiPayments.map(p => ({ reference: p.referenceId, amount: p.amount, status: p.status, method: 'upi_manual', date: p.submittedAt, type: p.itemType }));
 
     let combined = [...razorpayBookingPayments, ...razorpayOrderPayments, ...upiFormatted]
@@ -295,7 +295,7 @@ export const getActivity = async (req: AuthRequest, res: Response) => {
 
     const events = [
       ...myBookings.map(b => ({ type: 'booking_created', label: `Booking created — ${b.serviceName}`, ref: b.bookingId, amount: b.amount, timestamp: b.createdAt })),
-      ...myOrders.map(o => ({ type: 'order_created', label: 'Order placed', ref: o.orderId, amount: o.totalAmount, timestamp: o.createdAt })),
+      ...myOrders.map(o => ({ type: 'order_created', label: 'Order placed', ref: o.orderId, amount: o.totalAmount, timestamp: (o as any).createdAt })), // cast: same IOrder timestamps issue
       ...statusEvents.map((e: any) => ({ type: 'status_change', label: `${e.field === 'paymentStatus' ? 'Payment' : 'Booking'} → ${e.newValue.replace(/_/g, ' ')}`, ref: e.bookingRef, amount: null, timestamp: e.createdAt })),
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
