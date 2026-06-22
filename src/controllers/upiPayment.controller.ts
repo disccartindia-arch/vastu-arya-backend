@@ -1,0 +1,329 @@
+/// <reference types="node" />
+/**
+ * upiPayment.controller.ts
+ *
+ * CHANGED this round (PRODUCTION HOTFIX ROUND 11 — Phase D): same
+ * verified-login-time linkage pattern as payment.controller.ts —
+ * submitUpiPayment() now sets `userId`/`user` on the created Booking/
+ * Order from `req.user?._id` if a real session is present (route
+ * patched to use optionalAuth this round), `null`/`undefined`
+ * otherwise. Guest UPI submission — the existing default — is
+ * completely unaffected.
+ *
+ * Every other line in this file — Cloudinary upload, audit logging
+ * (Phase A), the 'all' filter fix (Phase A), admin notification
+ * (Phase B), verify/reject logic — is unchanged from the prior round.
+ */
+import { Request, Response } from 'express';
+import UpiPayment from '../models/UpiPayment';
+import PaymentAuditLog from '../models/PaymentAuditLog';
+import Booking from '../models/Booking';
+import Order from '../models/Order';
+import Service from '../models/Service';
+import Product from '../models/Product';
+import PaymentSettings from '../models/PaymentSettings';
+import { AuthRequest } from '../middleware/auth.middleware';
+import { uploadToCloudinary } from '../routes/upload.routes';
+import { notifyAdminOfPayment } from '../utils/adminNotification';
+
+const con = (console as any);
+
+function generateReferenceId(): string {
+  return `UPI-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+}
+
+async function logAudit(entry: {
+  paymentId: string;
+  referenceId: string;
+  action: 'SUBMITTED' | 'VERIFIED' | 'REJECTED';
+  adminUser?: string | null;
+  adminNotes?: string | null;
+  metadata?: Record<string, any>;
+}): Promise<void> {
+  try {
+    await (PaymentAuditLog as any).create(entry);
+  } catch (err: any) {
+    con.error('[PaymentAuditLog] failed to write audit entry:', err.message, entry);
+  }
+}
+
+const BOOKING_TYPES = ['service', 'booking', 'consultation'];
+const ORDER_TYPES   = ['product', 'order'];
+const VALID_TYPES    = [...BOOKING_TYPES, ...ORDER_TYPES];
+
+// ── PUBLIC: POST /api/payment/upi/submit ──────────────────────────────────────
+export const submitUpiPayment = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Payment screenshot is required.' });
+    }
+
+    const { itemId, itemType, amount, transactionId, uploaderName, uploaderPhone, upiId, itemName, email, formData } = req.body;
+
+    if (!itemType || !amount || !uploaderName || !uploaderPhone) {
+      return res.status(400).json({ success: false, message: 'itemType, amount, uploaderName and uploaderPhone are required.' });
+    }
+    if (!VALID_TYPES.includes(itemType)) {
+      return res.status(400).json({ success: false, message: `Invalid itemType. Allowed: ${VALID_TYPES.join(', ')}` });
+    }
+    const numericAmount = Number(amount);
+    if (!numericAmount || numericAmount < 1) {
+      return res.status(400).json({ success: false, message: 'Invalid amount.' });
+    }
+
+    const uploaded = await uploadToCloudinary(req.file.buffer, req.file.mimetype, req.file.originalname, 'vastuarya/upi-screenshots');
+
+    let resolvedUpiId = upiId;
+    if (!resolvedUpiId) {
+      const settings = await PaymentSettings.findOne();
+      resolvedUpiId = settings?.primaryUPI || 'aryavartguna@ybl';
+    }
+
+    let parsedFormData: Record<string, any> = {};
+    if (formData) {
+      try { parsedFormData = typeof formData === 'string' ? JSON.parse(formData) : formData; } catch { parsedFormData = {}; }
+    }
+
+    // NEW (Phase D) — verified login-time linkage only, identical
+    // rationale to payment.controller.ts.
+    const loggedInUserId: string | undefined = req.user?._id?.toString();
+
+    let createdBookingId: string | null = null;
+    let createdOrderId: string | null = null;
+    let resolvedItemName = itemName;
+
+    if (BOOKING_TYPES.includes(itemType)) {
+      let resolvedServiceName = itemName;
+      if (!resolvedServiceName && itemId) {
+        const service = await Service.findById(itemId).select('title').catch(() => null);
+        resolvedServiceName = service?.title?.en;
+      }
+      const bookingId = `BK${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      const booking = await Booking.create({
+        bookingId,
+        name: uploaderName,
+        phone: uploaderPhone,
+        email: email || undefined,
+        service: itemId || undefined,
+        serviceName: resolvedServiceName || 'Vastu Consultation',
+        amount: numericAmount,
+        formData: parsedFormData,
+        status: 'pending',
+        paymentMethod: 'upi_manual',
+        userId: loggedInUserId || null, // NEW
+      });
+      createdBookingId = booking._id.toString();
+      resolvedItemName = resolvedServiceName || 'Vastu Consultation';
+    } else {
+      let resolvedName = itemName;
+      if (!resolvedName && itemId) {
+        const product = await Product.findById(itemId).select('name').catch(() => null);
+        resolvedName = product?.name?.en;
+      }
+      const orderId = `ORD${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      const order = await Order.create({
+        orderId,
+        customerInfo: { name: uploaderName, email: email || '', phone: uploaderPhone, address: '', city: '', pincode: '' },
+        items: [{ product: itemId || undefined, name: resolvedName || 'Vastu Arya order', price: numericAmount, qty: 1, image: '' }],
+        totalAmount: numericAmount,
+        status: 'pending',
+        type: 'product',
+        paymentMethod: 'upi_manual',
+        user: loggedInUserId || undefined, // NEW
+      });
+      createdOrderId = order._id.toString();
+      resolvedItemName = resolvedName || 'Vastu Arya order';
+    }
+
+    const referenceId = generateReferenceId();
+    const payment = await UpiPayment.create({
+      referenceId,
+      itemId: itemId || null,
+      itemType,
+      bookingId: createdBookingId,
+      orderId: createdOrderId,
+      amount: numericAmount,
+      upiId: resolvedUpiId,
+      transactionId: transactionId || null,
+      screenshotUrl: uploaded.url,
+      uploaderName,
+      uploaderPhone,
+      status: 'UPI_PENDING',
+    });
+
+    await logAudit({
+      paymentId: payment._id.toString(),
+      referenceId: payment.referenceId,
+      action: 'SUBMITTED',
+      adminUser: null,
+      metadata: { amount: numericAmount, itemType, uploaderName, uploaderPhone, upiId: resolvedUpiId },
+    });
+
+    notifyAdminOfPayment({
+      bookingId: payment.referenceId,
+      customerName: uploaderName,
+      phone: uploaderPhone,
+      email: email || null,
+      itemName: resolvedItemName,
+      amount: numericAmount,
+      paymentMethod: 'upi_manual',
+      screenshotUrl: uploaded.url,
+    }).catch(() => {});
+
+    res.status(201).json({
+      success: true,
+      message: 'Payment submitted. Our team will verify it shortly.',
+      data: { referenceId: payment.referenceId, status: payment.status, bookingId: createdBookingId, orderId: createdOrderId },
+    });
+  } catch (error: any) {
+    con.error('[UpiPayment] submit error:', error.message);
+    res.status(500).json({ success: false, message: error.message || 'Submission failed.' });
+  }
+};
+
+// ── PUBLIC: GET /api/payment/upi/status/:referenceId ──────────────────────────
+export const getUpiPaymentStatus = async (req: Request, res: Response) => {
+  try {
+    const payment = await UpiPayment.findOne({ referenceId: req.params.referenceId }).select('referenceId status submittedAt verifiedAt');
+    if (!payment) return res.status(404).json({ success: false, message: 'Reference ID not found.' });
+    res.json({ success: true, data: payment });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ── ADMIN: GET /api/admin/upi-payments ────────────────────────────────────────
+export const listUpiPayments = async (req: Request, res: Response) => {
+  try {
+    const { status = 'UPI_PENDING', page = 1, limit = 20 } = req.query;
+    const filter: any = {};
+    if (status && status !== 'all') filter.status = status;
+    const skip = (Number(page) - 1) * Number(limit);
+    const [payments, total] = await Promise.all([
+      UpiPayment.find(filter).sort('-submittedAt').skip(skip).limit(Number(limit)),
+      UpiPayment.countDocuments(filter),
+    ]);
+    res.json({ success: true, data: payments, total, page: Number(page) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ── ADMIN: GET /api/admin/upi-payments/:id ────────────────────────────────────
+export const getUpiPaymentById = async (req: Request, res: Response) => {
+  try {
+    const payment = await UpiPayment.findById(req.params.id);
+    if (!payment) return res.status(404).json({ success: false, message: 'Payment not found.' });
+    res.json({ success: true, data: payment });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getUpiPaymentAuditLog = async (req: Request, res: Response) => {
+  try {
+    const logs = await (PaymentAuditLog as any).find({ paymentId: req.params.id }).sort('createdAt');
+    res.json({ success: true, data: logs });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ── ADMIN: POST /api/admin/upi-payments/:id/verify ────────────────────────────
+export const verifyUpiPayment = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { adminNotes } = req.body;
+
+    const payment = await UpiPayment.findById(id);
+    if (!payment) return res.status(404).json({ success: false, message: 'Payment not found.' });
+    if (payment.status === 'PAID') {
+      return res.status(400).json({ success: false, message: 'Payment already verified.' });
+    }
+
+    const adminIdentity = req.user?.name || req.user?.email || 'admin';
+
+    payment.status = 'PAID';
+    payment.verifiedAt = new Date();
+    payment.verifiedBy = adminIdentity;
+    payment.adminNotes = adminNotes ?? null;
+    await payment.save();
+
+    const noteSuffix = ` [UPI verified — ref ${payment.referenceId}]`;
+
+    if (payment.bookingId) {
+      const booking = await Booking.findById(payment.bookingId);
+      if (booking) {
+        booking.status = 'paid';
+        booking.paymentId = payment.referenceId;
+        booking.paymentMethod = 'upi_manual';
+        booking.notes = `${booking.notes || ''}${noteSuffix}`.trim();
+        await booking.save();
+      }
+    } else if (payment.orderId) {
+      const order = await Order.findById(payment.orderId);
+      if (order) {
+        order.status = 'paid';
+        order.paymentId = payment.referenceId;
+        order.paymentMethod = 'upi_manual';
+        order.notes = `${order.notes || ''}${noteSuffix}`.trim();
+        await order.save();
+      }
+    }
+
+    await logAudit({
+      paymentId: payment._id.toString(),
+      referenceId: payment.referenceId,
+      action: 'VERIFIED',
+      adminUser: adminIdentity,
+      adminNotes: adminNotes ?? null,
+      metadata: { amount: payment.amount, bookingId: payment.bookingId, orderId: payment.orderId },
+    });
+
+    res.json({ success: true, message: 'Payment verified and order/booking marked paid.', referenceId: payment.referenceId });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Verification failed.' });
+  }
+};
+
+// ── ADMIN: POST /api/admin/upi-payments/:id/reject ────────────────────────────
+export const rejectUpiPayment = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { adminNotes } = req.body;
+
+    const payment = await UpiPayment.findById(id);
+    if (!payment) return res.status(404).json({ success: false, message: 'Payment not found.' });
+    if (payment.status !== 'UPI_PENDING') {
+      return res.status(400).json({ success: false, message: `Cannot reject a payment with status: ${payment.status}` });
+    }
+
+    const adminIdentity = req.user?.name || req.user?.email || 'admin';
+    const resolvedNotes = adminNotes ?? 'Rejected by admin — screenshot did not match.';
+
+    payment.status = 'REJECTED';
+    payment.verifiedAt = new Date();
+    payment.verifiedBy = adminIdentity;
+    payment.adminNotes = resolvedNotes;
+    await payment.save();
+
+    if (payment.bookingId) {
+      await Booking.findByIdAndUpdate(payment.bookingId, { status: 'cancelled', notes: adminNotes || 'UPI payment rejected by admin.' });
+    } else if (payment.orderId) {
+      await Order.findByIdAndUpdate(payment.orderId, { status: 'cancelled', notes: adminNotes || 'UPI payment rejected by admin.' });
+    }
+
+    await logAudit({
+      paymentId: payment._id.toString(),
+      referenceId: payment.referenceId,
+      action: 'REJECTED',
+      adminUser: adminIdentity,
+      adminNotes: resolvedNotes,
+      metadata: { amount: payment.amount, bookingId: payment.bookingId, orderId: payment.orderId },
+    });
+
+    res.json({ success: true, message: 'Payment marked as rejected.' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Rejection failed.' });
+  }
+};
