@@ -44,4 +44,11 @@ const OrderSchema = new Schema<IOrder>({
   notes: { type: String },
 }, { timestamps: true });
 
+// NEW — Phase E: performance indexes matching account.controller.ts's
+// query patterns.
+OrderSchema.index({ user: 1, createdAt: -1 });
+OrderSchema.index({ paymentId: 1 });
+OrderSchema.index({ razorpayOrderId: 1 });
+OrderSchema.index({ status: 1, createdAt: -1 });
+
 export default mongoose.model<IOrder>('Order', OrderSchema);

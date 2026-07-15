@@ -103,7 +103,7 @@ export const getMyBookingDetail = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user._id.toString();
     const booking = await Booking.findOne({ bookingId: req.params.id })
-      .select('bookingId name serviceName amount paymentStatus bookingStatus createdAt updatedAt');
+      .select('bookingId name serviceName amount paymentStatus bookingStatus createdAt updatedAt userId');
 
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
 

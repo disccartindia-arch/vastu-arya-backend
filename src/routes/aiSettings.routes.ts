@@ -10,6 +10,32 @@ import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
 
+// GET /api/ai-settings/public — NEW (Phase E)
+// Public, unauthenticated slice used by the frontend AI composer to
+// preload quick-suggestion chips and CTA copy without needing admin
+// auth. Only exposes visitor-safe fields (no systemPrompt, no
+// trustedAdviceBlocks).
+router.get('/public', async (_req: Request, res: Response) => {
+  try {
+    let settings = await AISettings.findOne();
+    if (!settings) settings = await AISettings.create({});
+    res.json({
+      success: true,
+      data: {
+        quickSuggestions: settings.quickSuggestions,
+        ctaText: settings.ctaText,
+        showConsultationCTA: settings.showConsultationCTA,
+        showDisclaimer: settings.showDisclaimer,
+        disclaimerText: settings.disclaimerText,
+        showFollowUp: settings.showFollowUp,
+        followUpText: settings.followUpText,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.get('/', async (req: Request, res: Response) => {
   try {
     let settings = await AISettings.findOne();

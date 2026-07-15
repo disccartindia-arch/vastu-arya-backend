@@ -19,7 +19,7 @@
  * from before this round.
  */
 import { Router } from 'express';
-import { createOrder, verifyPayment } from '../controllers/payment.controller';
+import { createOrder, verifyPayment, razorpayWebhook } from '../controllers/payment.controller';
 import { getPaymentSettings, updatePaymentSettings } from '../controllers/paymentSettings.controller';
 import { authMiddleware, adminMiddleware, optionalAuth } from '../middleware/auth.middleware';
 import { paymentLimiter } from '../middleware/rateLimit.middleware';
@@ -28,6 +28,11 @@ const router = Router();
 
 router.post('/create-order', paymentLimiter, createOrder);
 router.post('/verify', paymentLimiter, optionalAuth, verifyPayment); // NEW — optionalAuth added
+// NEW — Phase E: Razorpay signed webhook. NOT rate-limited by
+// paymentLimiter because Razorpay retries with backoff and their
+// per-second rate is bounded by their own scheduler. Signature verify
+// inside the controller is the security boundary.
+router.post('/webhook', razorpayWebhook);
 
 router.get('/settings', getPaymentSettings);
 router.put('/settings', authMiddleware, adminMiddleware, updatePaymentSettings);

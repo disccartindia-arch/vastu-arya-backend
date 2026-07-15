@@ -94,6 +94,15 @@ const BookingSchema = new Schema<IBooking>({
   userId: { type: String, default: null, index: true },
 }, { timestamps: true });
 
+// NEW — Phase E: performance indexes to keep the customer dashboard
+// snappy even at production scale. Every query in account.controller.ts
+// / booking.controller.ts already filters on one of these — the index
+// is what turns those from collection scans into O(log n) lookups.
+BookingSchema.index({ userId: 1, createdAt: -1 });      // /account/bookings list
+BookingSchema.index({ paymentId: 1 });                   // Razorpay idempotency
+BookingSchema.index({ razorpayOrderId: 1 });             // webhook lookup
+BookingSchema.index({ bookingStatus: 1, createdAt: -1 }); // admin filter
+
 BookingSchema.pre('save', function (next) {
   const doc = this as unknown as IBooking;
   const statusUntouched =
