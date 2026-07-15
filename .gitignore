@@ -4,3 +4,10 @@ out
 build
 .DS_Store
 *.log
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials

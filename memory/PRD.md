@@ -1,72 +1,80 @@
-# PRD — Vastu Arya Frontend Production Update
+# PRD — Vastu Arya Backend Phase E (Backend Production Implementation)
 
 ## Original problem statement (verbatim)
 
-> VASTU ARYA FRONTEND – PRODUCTION UPDATE. You are working ONLY on the Frontend
-> Repository. Do NOT modify backend logic. Do NOT redesign the website. Maintain
-> the current premium UI and branding. Your task is to audit the frontend first,
-> then implement all required frontend improvements. Tasks: (1) Payment
-> experience overhaul with loading / progress / retry / continue / animations /
-> failed / pending / verification-pending / timeline / Razorpay unavailable →
-> UPI auto-fallback. (2) Customer dashboard with My Orders / Bookings /
-> Payments / Activity / Profile / Booking-Order-Payment Timeline surfaced in
-> the Navbar, responsive on desktop/tablet/mobile. (3) Favicon replacement
-> (favicon.ico + 16/32 + apple 180 + android 192/512) wired via Next.js
-> metadata + manifest + PWA icons + browser tabs. (4) AI Vastu UI: chat, typing
-> animation, thinking indicator, conversation history, image upload previews +
-> multiple, retry, clear, new-chat, suggested questions, follow-ups, better
-> error handling, responsive mobile — no hardcoded responses. (5) AI Analysis
-> screen: image upload, progress, analysis loading, confidence indicator (if
-> backend provides), section cards (Summary/Recommendations/Warnings/Next
-> Steps), Export to PDF (if backend supports), Share, Copy, Download. (6)
-> Performance: lazy loading, image loading, loading skeletons, caching,
-> animations, a11y, SEO, Core Web Vitals. (7) Testing: no TS errors, no ESLint
-> errors, no build errors, no broken imports, no broken routes, no console
-> errors. Deliverables: updated repo + IMPLEMENTATION_REPORT.md +
-> FILE_CHANGE_REPORT.md + TESTING_REPORT.md + DEPLOYMENT_GUIDE.md.
+> VASTU ARYA BACKEND – PRODUCTION IMPLEMENTATION (PHASE E). You are working ONLY
+> on the Backend Repository. Make the backend fully compatible with the (Phase D)
+> frontend and production-ready. Do NOT redesign the architecture unnecessarily.
+> Do NOT remove existing working functionality. Preserve backward compatibility
+> wherever possible. Tasks: (1) Complete Payment System — Razorpay create-order,
+> HMAC verify, webhooks, duplicate protection, booking/order creation, dashboard
+> sync, audit logs, email notifications. Manual UPI QR + screenshot flow
+> preserved. Prevent duplicates / replays / tampering / race conditions.
+> (2) AI Vastu Engine rebuilt on a real LLM — unique responses, session context,
+> uncertainty handling, image analysis for floor plans / layouts / blueprints /
+> land images, structured JSON `{answer, summary, recommendations, warnings,
+> nextSteps, followUp[], confidence, pdfUrl?, timeline?}`. (3) Customer dashboard
+> endpoints verified for auth, ownership, pagination, filtering. (4) Notification
+> system pluggable to WhatsApp/SMS later. (5) Customer status engine with full
+> lifecycle + audit + dashboard sync + admin sync + notifications. (6) Perf:
+> indexes, response time, caching, validation, rate limiting, logging. (7)
+> Security: JWT, admin/customer perms, webhook signing, payment verification,
+> file uploads, AI endpoints. Prevent replay / unauthorised access / injection.
+> (8) End-to-end tests. Deliverables: updated backend repo + IMPLEMENTATION_REPORT.md
+> + API_CHANGELOG.md + DATABASE_CHANGES.md + TESTING_REPORT.md + DEPLOYMENT_GUIDE.md
+> + END_TO_END_TEST_REPORT.md.
 
 ## Stack
 
-- Next.js 14.2.5 (App Router) · TypeScript · Tailwind · Zustand · framer-motion · axios
-- Backend URL supplied via `NEXT_PUBLIC_API_URL`; not modified in this update.
+- Node.js ≥ 18 · Express 4.19 · TypeScript 5.4 · Mongoose 8.4 · MongoDB.
+- Deploy: Render (`render.yaml`), MongoDB Atlas, Cloudinary (screenshots).
+- Repo: `https://github.com/disccartindia-arch/vastu-arya-backend` (cloned to `/app/backend`).
 
-## User personas
+## User personas (unchanged from earlier rounds)
 
-1. **Paying customer** — books a Vastu consultation or buys a product, pays via Razorpay or UPI.
-2. **Repeat customer** — uses the /account dashboard to track bookings, orders, payments and status changes.
-3. **AI-first visitor** — describes a concern and receives an AI Vastu analysis, may then book.
+1. **Paying customer** (Razorpay auto or UPI manual).
+2. **Repeat customer** using the dashboard to track bookings/orders/payments.
+3. **Admin** approving UPI submissions, updating booking statuses, running the AI-settings admin UI.
+4. **AI-first visitor** — no login, gets Vastu analysis with optional images.
 
 ## Core requirements (static)
 
-- Preserve premium brand: saffron/gold palette, Playfair Display + DM Sans, luxury feel.
-- Consume existing backend endpoints via `lib/api.ts` / `config/payment.config.ts`.
-- No hardcoded AI responses; render only what the backend returns.
-- Every interactive / info element has a `data-testid`.
-- Fully responsive (375px → 1440px).
+- Every existing route/response shape preserved (backward compatibility).
+- All payments audit-logged (append-only).
+- Every booking status transition audit-logged + optionally customer-notified via email.
+- Guest checkout supported; verified login-time linkage adds `userId` to Booking/Order when the customer is logged in.
+- No fabricated AI answers — the model must refuse rather than guess.
+- Multi-image AI vision support without breaking the pure-JSON path.
 
-## What's been implemented (this session — Jan 2026)
+## Implemented in this phase (Phase E, Jan 2026)
 
-- **Payment result screens**: `/payment-success`, `/payment-failed`, `/payment-pending`, `/payment-submitted` all rewritten with a shared `PaymentTimeline`, decoded error copy, animation and CTAs.
-- **Checkout**: `PaymentProgress` inline tracker + Razorpay-unavailable auto-fallback to UPI + dedicated `Pay via UPI QR` button.
-- **AppointmentPopup**: passes real captured lead name/phone to Razorpay; falls back to UPI on gateway failures.
-- **AI Vastu**: new shared engine `useVastuChat` + `ChatUI` primitives used by both the floating `VastuAIGuide` bubble and the `/vastu-ai` page. Chat log with thinking dots, typewriter reveal, per-message copy/share/download/retry, follow-up chips, multi-image upload previews, room+direction selects.
-- **Favicons**: multi-size PNGs + `.ico` + Apple + Android + maskable, PWA manifest wired through `metadata.icons` + `metadata.manifest`.
-- **Navbar**: desktop dropdown + mobile menu expose Overview / My Bookings / My Orders / My Payments / Activity / Profile.
-- **Account detail pages**: booking + order pages use `PaymentTimeline` for a real customer-visible status arc.
-- **Print stylesheet** for `/vastu-ai` PDF-save fallback.
-- **Docs delivered**: `FRONTEND_AUDIT.md`, `PAYMENT_UI_AUDIT.md`, `AI_UI_AUDIT.md`, `FAVICON_AUDIT.md`, `IMPLEMENTATION_REPORT.md`, `FILE_CHANGE_REPORT.md`, `TESTING_REPORT.md`, `DEPLOYMENT_GUIDE.md`.
+- **Payment**:
+  - `verifyPayment` now idempotent (dedupe by `razorpay_payment_id`).
+  - Razorpay success now writes `PaymentAuditLog(VERIFIED)` + two `StatusAuditLog` rows so the customer booking timeline is populated.
+  - Customer-notification dispatch fires on Razorpay success (previously only on admin transitions).
+  - **New**: `POST /api/payment/webhook` for Razorpay `payment.captured` / `payment.failed` / `refund.processed`. HMAC-verified against `RAZORPAY_WEBHOOK_SECRET`.
+- **AI**:
+  - **New**: `POST /api/ai/vastu-analysis` (JSON or multipart with up to 4 images) matching the FE contract.
+  - **New**: `GET /api/ai-settings/public` for visitor-safe settings.
+  - **New**: Emergent Universal Key primary provider (GPT-4o + vision); direct Gemini + Anthropic retained as fallbacks.
+  - **New**: per-`sessionId` in-memory context store (30-min TTL, 6-turn buffer, capped 500 entries).
+  - Structured JSON contract: `greeting/analysis/summary/recommendations/warnings/nextSteps/remedies/followUp[]/confidence/note/needsMoreInfo/clarifyingQuestions/disclaimer/consultationCTA`.
+- **Dashboard**: bug fix in `getMyBookingDetail` (userId not in projection) + four new perf indexes on Booking + four on Order.
+- **Notification**: no code change — the existing pluggable `notificationService.sendCustomerUpdate` is now called from Razorpay `verifyPayment` too.
+- **Status engine**: dual-axis writes on Razorpay success wire it up end-to-end.
+- **Docs**: 12 markdown files shipped (see FILE_CHANGE_REPORT.md).
+- **Testing**: 27 e2e tests pass — see END_TO_END_TEST_REPORT.md.
 
-## Backlog / P1 candidates
+## Backlog / P1
 
-- **Streaming AI responses** — when the backend adds SSE / `text/event-stream`, only `useVastuChat.send()` needs to change; the UI is already ready.
-- **Backend image analysis** — the composer already accepts up to 4 images and passes a `File[]` to `send()`. When the backend accepts multipart Vastu-analysis requests, wire the array into the request body.
-- **Confidence indicator from backend** — the `ConfidencePill` renders only when `payload.confidence` is present; ask the backend team to populate it.
-- **PDF export via backend** — the UI checks for `payload.pdfUrl` first; ask the backend team to generate signed URLs, otherwise the client-side print fallback continues.
-- **Lighthouse pass on production** — Core Web Vitals numbers not measurable in this sandbox.
+- Persist AI session context in Mongo (currently in-memory, doesn't survive process restarts / multi-instance).
+- Move payment idempotency to a unique-index on `paymentId` (belt-and-braces).
+- Add `crypto.timingSafeEqual` to HMAC comparisons.
+- Streaming (SSE) for the AI response — FE is already streaming-ready.
+- Persistent structured JSON logging (pino / winston) for Render's log viewer.
 
 ## Non-goals
 
-- Backend changes.
-- Design system changes (colours / fonts / layout / spacing).
-- Admin panel changes.
-- i18n dictionary expansion.
+- Frontend changes (Phase D already shipped).
+- Rebuilding admin UI, i18n, or database schemas.
+- Adding actual WhatsApp/SMS providers (the dispatch layer supports them, no real provider wired in).
