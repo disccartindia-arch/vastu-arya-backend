@@ -94,3 +94,20 @@ body {
 .mobile-input-safe { font-size: 16px !important; }
 
 @layer utilities { .text-balance { text-wrap: balance; } }
+
+
+/* Print styles used by /vastu-ai when the customer picks "Print / Save as PDF".
+   Hides chrome (navbar, footer, composer, floating buttons), keeps the
+   conversation card printable. */
+@media print {
+  nav, footer, [data-testid="ask-ai-fab"], [data-testid="ask-ai-sheet"],
+  [data-testid="conv-newchat-btn"], [data-testid="conv-clear-btn"],
+  [data-testid="conv-print-btn"], [data-testid="ai-image-picker-btn"],
+  [data-testid="ai-submit-btn"], [data-testid="book-cta-btn"],
+  [data-testid="whatsapp-cta-btn"] {
+    display: none !important;
+  }
+  main { background: white !important; }
+  body { color: #000 !important; }
+  .max-h-\[65vh\] { max-height: unset !important; overflow: visible !important; }
+}

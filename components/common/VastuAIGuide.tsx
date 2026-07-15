@@ -1,71 +1,126 @@
 'use client';
-import { useState } from 'react';
-import { Sparkles, X, Send, Loader2 } from 'lucide-react';
-import { aiAPI } from '../../lib/api';
-import Link from 'next/link';
+/**
+ * components/common/VastuAIGuide.tsx
+ * Floating "Ask AI" chat widget. Uses the shared useVastuChat engine
+ * so the interaction model (thinking indicator → typewriter reveal →
+ * remedies fade-in → follow-up chips) matches the full /vastu-ai page
+ * exactly. Maintains the site's saffron branding & floating-button UX.
+ */
 
-const CHIPS = ['Financial problems','Relationship issues','Health problems','Career obstacles','Sleep disturbances','Family conflicts','Business losses'];
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { Sparkles, X, Send, Trash2, Plus } from 'lucide-react';
+import { useVastuChat } from '../vastu-ai/useVastuChat';
+import { AssistantMessage, UserMessage, EmptyChat } from '../vastu-ai/ChatUI';
+
+const CHIPS = ['Financial problems', 'Relationship issues', 'Health problems', 'Career obstacles', 'Sleep disturbances'];
 
 export default function VastuAIGuide() {
   const [open, setOpen] = useState(false);
-  const [concern, setConcern] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [text, setText] = useState('');
+  const { messages, busy, send, retry, clear } = useVastuChat();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const handleAsk = async () => {
-    if (concern.trim().length < 5) return;
-    setLoading(true); setResult(null);
-    try {
-      const r = await aiAPI.vastuAnalysis({ concern: concern.trim() });
-      if (r?.data?.success) setResult(r.data.data);
-    } catch { setResult(null); } finally { setLoading(false); }
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  const submit = () => {
+    if (text.trim().length < 5 || busy) return;
+    send({ text });
+    setText('');
   };
 
   return (
     <>
-      <button onClick={() => setOpen(true)} title="Ask AI Vastu Guide"
-        style={{ position:'fixed', bottom:'148px', right:'20px', zIndex:998, background:'linear-gradient(135deg,#FF6B00,#FF9933)', boxShadow:'0 4px 20px rgba(255,107,0,0.5)', border:'none', borderRadius:'999px', height:'48px', padding:'0 16px 0 12px', display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', color:'#fff', fontWeight:700, fontSize:'14px' }}>
+      <button
+        onClick={() => setOpen(true)}
+        title="Ask Vastu AI"
+        data-testid="ask-ai-fab"
+        style={{
+          position: 'fixed', bottom: '148px', right: '20px', zIndex: 998,
+          background: 'linear-gradient(135deg,#FF6B00,#FF9933)',
+          boxShadow: '0 4px 20px rgba(255,107,0,0.5)', border: 'none',
+          borderRadius: '999px', height: '48px', padding: '0 16px 0 12px',
+          display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
+          color: '#fff', fontWeight: 700, fontSize: '14px',
+        }}
+      >
         <Sparkles size={17} /><span>Ask AI</span>
       </button>
-      {open && <div onClick={() => setOpen(false)} style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.5)' }} />}
-      <div style={{ position:'fixed', bottom:0, right:0, zIndex:1001, width:'100%', maxWidth:'420px', maxHeight:'88vh', background:'#fff', borderRadius:'24px 24px 0 0', boxShadow:'0 -8px 40px rgba(0,0,0,0.15)', display:'flex', flexDirection:'column', transform:open?'translateY(0)':'translateY(100%)', transition:'transform 0.3s cubic-bezier(0.32,0.72,0,1)' }}>
-        <div style={{ background:'linear-gradient(135deg,#FF6B00,#FF9933)', borderRadius:'24px 24px 0 0', padding:'16px 20px', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 }}>
-          <div style={{ width:38, height:38, borderRadius:'50%', background:'rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center' }}><Sparkles size={18} color="#fff" /></div>
-          <div style={{ flex:1 }}><p style={{ color:'#fff', fontWeight:700, fontSize:'14px', margin:0 }}>Vastu AI Guide</p><p style={{ color:'rgba(255,255,255,0.8)', fontSize:'12px', margin:0 }}>Describe your concern</p></div>
-          <button onClick={() => setOpen(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:30, height:30, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}><X size={15} color="#fff" /></button>
+
+      {open && <div onClick={() => setOpen(false)} className="fixed inset-0 z-[1000] bg-black/50" />}
+
+      <div
+        className="fixed bottom-0 right-0 z-[1001] w-full sm:max-w-md max-h-[92vh] bg-white rounded-t-3xl sm:rounded-3xl sm:m-4 flex flex-col shadow-2xl"
+        style={{ transform: open ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.32,0.72,0,1)' }}
+        data-testid="ask-ai-sheet"
+        role="dialog"
+        aria-hidden={!open}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 p-4 rounded-t-3xl sm:rounded-t-3xl" style={{ background: 'linear-gradient(135deg,#FF6B00,#FF9933)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0"><Sparkles size={16} className="text-white" /></div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold text-sm">Vastu AI Guide</p>
+              <p className="text-white/80 text-xs">Real answers, in real time</p>
+            </div>
+            <button data-testid="ai-newchat-btn" title="New chat" onClick={clear} className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white">
+              <Plus size={14} />
+            </button>
+            <button data-testid="ai-clear-btn" title="Clear conversation" onClick={clear} className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white">
+              <Trash2 size={14} />
+            </button>
+            <button data-testid="ai-close-btn" onClick={() => setOpen(false)} className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white">
+              <X size={14} />
+            </button>
+          </div>
         </div>
-        <div style={{ flex:1, overflowY:'auto', padding:'20px' }}>
-          {!result ? (
-            <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-              <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
-                {CHIPS.map(c=><button key={c} onClick={()=>setConcern(p=>p?`${p}, ${c}`:c)} style={{ fontSize:'12px', padding:'6px 12px', borderRadius:'999px', border:`1px solid ${concern.includes(c)?'#FF6B00':'#FED7AA'}`, background:concern.includes(c)?'#FF6B00':'#fff', color:concern.includes(c)?'#fff':'#4B5563', cursor:'pointer' }}>{c}</button>)}
-              </div>
-              <textarea value={concern} onChange={e=>setConcern(e.target.value)} rows={3} placeholder="Describe your Vastu concern..." style={{ width:'100%', boxSizing:'border-box', padding:'12px 16px', border:'1.5px solid #FED7AA', borderRadius:'12px', fontSize:'14px', outline:'none', resize:'none', fontFamily:'inherit' }} />
-              <button onClick={handleAsk} disabled={loading||concern.trim().length<5} style={{ padding:'14px', borderRadius:'12px', border:'none', background:concern.trim().length<5?'#E5E7EB':'linear-gradient(135deg,#FF6B00,#FF9933)', color:concern.trim().length<5?'#9CA3AF':'#fff', fontWeight:700, fontSize:'14px', cursor:concern.trim().length<5?'not-allowed':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px' }}>
-                {loading?<><Loader2 size={15} style={{ animation:'spin 1s linear infinite' }}/>Analysing…</>:<><Send size={14}/>Get Vastu Guidance</>}
-              </button>
-            </div>
-          ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-              <div style={{ background:'#FFF7ED', borderRadius:'16px', padding:'16px', border:'1px solid #FED7AA' }}>
-                <p style={{ color:'#FF6B00', fontWeight:700, fontSize:'13px', marginBottom:'6px' }}>{result.greeting}</p>
-                <p style={{ color:'#4B5563', fontSize:'13px', lineHeight:1.6, margin:0 }}>{result.analysis}</p>
-              </div>
-              {result.remedies?.map((r:any,i:number)=>(
-                <div key={i} style={{ display:'flex', gap:'12px', padding:'12px', borderRadius:'16px', border:'1px solid #FED7AA', background:'#fff' }}>
-                  <div style={{ width:28, height:28, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'bold', fontSize:12, flexShrink:0, background:'linear-gradient(135deg,#FF6B00,#FF9933)' }}>{i+1}</div>
-                  <div><p style={{ fontWeight:'bold', color:'#1A0A00', fontSize:13, marginBottom:4 }}>{r.title}</p><p style={{ color:'#4B5563', fontSize:12 }}>✅ {r.action}</p><p style={{ color:'#9CA3AF', fontSize:11, marginTop:4 }}>📍 {r.zone} · 💡 {r.benefit}</p></div>
-                </div>
-              ))}
-              <Link href="/vastu-ai" onClick={()=>setOpen(false)} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', padding:'13px', borderRadius:'12px', border:'1.5px solid #FED7AA', color:'#FF6B00', fontWeight:600, fontSize:'13px', textDecoration:'none' }}>
-                <Sparkles size={14}/> Full AI Vastu Analysis
-              </Link>
-              <button onClick={()=>{setResult(null);setConcern('');}} style={{ background:'none', border:'none', color:'#9CA3AF', fontSize:'12px', cursor:'pointer', padding:'4px' }}>Ask something else</button>
-            </div>
+
+        {/* Log */}
+        <div ref={scrollRef} data-testid="ai-log" className="flex-1 overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-white to-orange-50/40">
+          {messages.length === 0 && <EmptyChat onQuick={q => { setText(q); }} />}
+          {messages.map(m =>
+            m.role === 'user'
+              ? <UserMessage key={m.id} m={m} />
+              : <AssistantMessage key={m.id} m={m} onRetry={retry} onFollowUp={q => { setText(q); }} compact />
           )}
         </div>
+
+        {/* Chip row (when empty) */}
+        {messages.length === 0 && (
+          <div className="px-4 pb-2 flex flex-wrap gap-1.5" data-testid="ai-chips">
+            {CHIPS.map(c => (
+              <button key={c} onClick={() => setText(prev => prev ? `${prev}, ${c}` : c)} className="px-2.5 py-1 rounded-full text-xs border border-orange-200 text-gray-600 hover:border-primary hover:text-primary">
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Composer */}
+        <div className="flex-shrink-0 p-3 border-t border-orange-100 bg-white flex items-end gap-2">
+          <textarea
+            data-testid="ai-composer"
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
+            rows={1}
+            placeholder="Describe your Vastu concern…"
+            className="flex-1 resize-none max-h-32 px-3 py-2.5 border border-orange-200 rounded-2xl text-sm focus:outline-none focus:border-primary"
+          />
+          <button data-testid="ai-send-btn" onClick={submit} disabled={busy || text.trim().length < 5}
+            className="w-11 h-11 rounded-full flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: 'linear-gradient(135deg,#FF6B00,#FF9933)' }}>
+            <Send size={16} />
+          </button>
+        </div>
+
+        <div className="px-4 pb-3 text-center text-[11px] text-gray-400">
+          <Link href="/vastu-ai" onClick={() => setOpen(false)} className="underline hover:text-primary">Open full analysis page →</Link>
+        </div>
       </div>
-      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </>
   );
 }

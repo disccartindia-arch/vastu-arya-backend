@@ -169,11 +169,11 @@ export default function AppointmentPopup({ lang = "en" }: AppointmentPopupProps)
       await initiateRazorpayPayment({
         amount: service.offerPrice,
         type: "service",
+        name: leadData?.name || "",
+        phone: leadData?.phone || "",
+        email: leadData?.email || "",
+        description: lang === "hi" ? service.title.hi : service.title.en,
         orderData: {
-          // CHANGED: previously hardcoded to "" — now uses the
-          // already-captured lead details, so the customer is never
-          // asked for this again and Razorpay's prefill / the resulting
-          // Booking record actually contain their real name and phone.
           name: leadData?.name || "",
           phone: leadData?.phone || "",
           serviceName: lang === "hi" ? service.title.hi : service.title.en,
@@ -184,9 +184,16 @@ export default function AppointmentPopup({ lang = "en" }: AppointmentPopupProps)
           toast.success("Booking confirmed!");
           onClose();
         },
-        onFailure: () => {
+        onFailure: (reason?: string) => {
           markLeadStatus("FAILED", "razorpay");
-          toast.error("Payment failed. Please try again or use UPI.");
+          // Razorpay unavailable → auto-open UPI fallback instead of
+          // leaving the customer wondering what to do next.
+          if (reason === "script_load_failed" || reason === "create_order_failed") {
+            toast("Payment gateway unavailable — switching to UPI.", { icon: "ℹ️" });
+            handlePayWithUPI(service);
+          } else if (reason !== "user_dismissed") {
+            toast.error("Payment failed. Please try again or use UPI.");
+          }
         },
       });
     } catch {

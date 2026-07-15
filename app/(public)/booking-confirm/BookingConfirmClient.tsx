@@ -93,15 +93,13 @@ function BookingContent() {
             </div>
             <div className="flex-1">
               <p className="font-bold text-sm mb-0.5" style={{ color: '#1A0A00' }}>Pay ₹{amount} via UPI</p>
-              <p className="text-xs text-gray-500 mb-2">Scan QR or send to UPI ID below.</p>
-              <code className="text-xs bg-white px-3 py-1.5 rounded-lg border font-mono font-semibold" style={{ color: '#FF6B00', borderColor: 'rgba(255,107,0,0.25)' }}>
-                vastuarya@ybl
-              </code>
+              <p className="text-xs text-gray-500 mb-2">Scan the QR code or open your favourite UPI app.</p>
               <button
                 onClick={() => setUpiOpen(true)}
-                className="mt-2 flex items-center gap-1.5 text-xs text-orange-600 font-semibold hover:underline"
+                data-testid="open-upi-btn"
+                className="mt-1 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:opacity-90"
               >
-                <QrCode size={12} /> Open UPI QR Payment →
+                <QrCode size={12} /> Open UPI QR Payment
               </button>
             </div>
           </div>

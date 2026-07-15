@@ -98,15 +98,27 @@ export default function Navbar() {
                 {t('nav.bookNow')}
               </button>
               {user ? (
-                <div className="relative group">
-                  <button className="flex items-center gap-1 p-1">
+                <div className="relative group" data-testid="account-dropdown">
+                  <button className="flex items-center gap-1 p-1" data-testid="account-avatar-btn" aria-label="Account menu">
                     <span className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ background: 'linear-gradient(135deg,#D4A017,#FF6B00)' }}>{user.name?.[0]?.toUpperCase()}</span>
                     <ChevronDown size={12} style={{ color: '#5C3D1E' }} />
                   </button>
-                  <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl py-2 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50" style={{ border: '1px solid rgba(212,160,23,0.15)' }}>
-                    {isAdmin() && <Link href="/admin" className="block px-4 py-2 text-sm font-semibold hover:bg-orange-50 transition-colors" style={{ color: '#FF6B00' }}>{t('nav.adminPanel')}</Link>}
-                    <Link href="/dashboard" className="block px-4 py-2 text-sm hover:bg-orange-50 transition-colors" style={{ color: '#5C3D1E' }}>{t('nav.myAccount')}</Link>
-                    <button onClick={logout} className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors">{t('nav.logout')}</button>
+                  <div className="absolute right-0 top-full pt-2 w-64 opacity-0 invisible group-hover:opacity-100 group-hover:visible focus-within:opacity-100 focus-within:visible transition-all z-50">
+                    <div className="bg-white rounded-2xl shadow-xl py-2" style={{ border: '1px solid rgba(212,160,23,0.15)' }}>
+                      <div className="px-4 py-2 border-b border-orange-50">
+                        <p className="text-xs text-gray-400">Signed in as</p>
+                        <p className="text-sm font-semibold text-text-dark truncate">{user.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                      </div>
+                      {isAdmin() && <Link href="/admin" data-testid="nav-admin" className="block px-4 py-2 text-sm font-semibold hover:bg-orange-50 transition-colors" style={{ color: '#FF6B00' }}>{t('nav.adminPanel')}</Link>}
+                      <Link href="/account"          data-testid="nav-account-overview" className="block px-4 py-2 text-sm hover:bg-orange-50 transition-colors" style={{ color: '#5C3D1E' }}>Overview</Link>
+                      <Link href="/account/bookings" data-testid="nav-account-bookings" className="block px-4 py-2 text-sm hover:bg-orange-50 transition-colors" style={{ color: '#5C3D1E' }}>My Bookings</Link>
+                      <Link href="/account/orders"   data-testid="nav-account-orders"   className="block px-4 py-2 text-sm hover:bg-orange-50 transition-colors" style={{ color: '#5C3D1E' }}>My Orders</Link>
+                      <Link href="/account/payments" data-testid="nav-account-payments" className="block px-4 py-2 text-sm hover:bg-orange-50 transition-colors" style={{ color: '#5C3D1E' }}>My Payments</Link>
+                      <Link href="/account/activity" data-testid="nav-account-activity" className="block px-4 py-2 text-sm hover:bg-orange-50 transition-colors" style={{ color: '#5C3D1E' }}>Activity</Link>
+                      <Link href="/account/profile"  data-testid="nav-account-profile"  className="block px-4 py-2 text-sm hover:bg-orange-50 transition-colors" style={{ color: '#5C3D1E' }}>Profile</Link>
+                      <button onClick={logout} data-testid="nav-logout" className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors border-t border-orange-50 mt-1">{t('nav.logout')}</button>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -139,6 +151,28 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            {user && (
+              <div className="pt-2 mt-2 border-t border-orange-100">
+                <p className="px-4 pt-2 pb-1 text-xs uppercase tracking-wider text-gray-400">My Account</p>
+                {[
+                  { href: '/account',          label: 'Overview',    testid: 'mnav-account-overview' },
+                  { href: '/account/bookings', label: 'My Bookings', testid: 'mnav-account-bookings' },
+                  { href: '/account/orders',   label: 'My Orders',   testid: 'mnav-account-orders'   },
+                  { href: '/account/payments', label: 'My Payments', testid: 'mnav-account-payments' },
+                  { href: '/account/activity', label: 'Activity',    testid: 'mnav-account-activity' },
+                  { href: '/account/profile',  label: 'Profile',     testid: 'mnav-account-profile'  },
+                ].map(item => (
+                  <Link key={item.href} href={item.href} data-testid={item.testid} onClick={() => setMobileMenuOpen(false)}
+                    className="block px-4 py-2.5 text-sm font-medium rounded-xl hover:text-primary hover:bg-orange-50" style={{ color: '#5C3D1E' }}>
+                    {item.label}
+                  </Link>
+                ))}
+                <button onClick={() => { logout(); setMobileMenuOpen(false); }} data-testid="mnav-logout"
+                  className="block w-full text-left px-4 py-2.5 text-sm font-medium rounded-xl text-red-500 hover:bg-red-50 mt-1">
+                  {t('nav.logout')}
+                </button>
+              </div>
+            )}
             <button onClick={() => { setShowAppointmentPopup(true); setMobileMenuOpen(false); }} className="w-full mt-2 py-3 rounded-xl font-semibold text-sm text-white" style={{ background: 'linear-gradient(135deg,#FF6B00,#FF8C33)' }}>
               {t('nav.bookNow')}
             </button>
