@@ -31,7 +31,7 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
 
     const [totalBookings, activeBookings, completedBookings, totalOrders, pendingPayments, verifiedPayments, latestBooking, latestOrder, latestStatusChange] = await Promise.all([
       Booking.countDocuments({ userId }),
-      Booking.countDocuments({ userId, bookingStatus: { $in: ['confirmed', 'consultation_scheduled', 'in_progress'] } }),
+      Booking.countDocuments({ userId, bookingStatus: { $in: ['pending_payment', 'payment_submitted', 'confirmed', 'consultation_scheduled', 'in_progress'] } }),
       Booking.countDocuments({ userId, bookingStatus: 'completed' }),
       Order.countDocuments({ user: userId }),
       Booking.countDocuments({ userId, paymentStatus: { $in: ['pending', 'submitted'] } }),
