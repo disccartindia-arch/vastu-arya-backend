@@ -229,13 +229,13 @@ export interface ConsultationEmailPayload {
   amount: number;
   date: Date;
   time: string;
-  mode: 'google_meet' | 'whatsapp' | 'phone' | 'offline';
+  meetingType: 'google_meet' | 'whatsapp' | 'phone' | 'offline';
   meetingLink?: string | null;
   customerNote?: string | null;
   rescheduled?: boolean;
 }
 
-const MODE_LABEL: Record<ConsultationEmailPayload['mode'], string> = {
+const MEETING_TYPE_LABEL: Record<ConsultationEmailPayload['meetingType'], string> = {
   google_meet: 'Google Meet (Video Call)',
   whatsapp:    'WhatsApp Call',
   phone:       'Phone Call',
@@ -244,7 +244,7 @@ const MODE_LABEL: Record<ConsultationEmailPayload['mode'], string> = {
 
 function buildConsultationEmailHtml(payload: ConsultationEmailPayload): string {
   const dateStr = payload.date.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const modeLabel = MODE_LABEL[payload.mode];
+  const modeLabel = MEETING_TYPE_LABEL[payload.meetingType];
   const trackUrl = statusLink(payload.bookingId);
   const websiteUrl = getFrontendBaseUrl();
   const supportPhone = getSupportPhone();

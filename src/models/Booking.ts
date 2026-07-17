@@ -31,7 +31,7 @@ export type BookingStatus =
   | 'in_progress'
   | 'completed'
   | 'cancelled';
-export type ConsultationMode = 'google_meet' | 'whatsapp' | 'phone' | 'offline';
+export type MeetingType = 'google_meet' | 'whatsapp' | 'phone' | 'offline';
 export type ConsultationStatus = 'not_scheduled' | 'scheduled' | 'completed' | 'cancelled';
 
 export interface IBooking extends Document {
@@ -50,19 +50,19 @@ export interface IBooking extends Document {
   status: string;
   paymentStatus: PaymentStatus;
   bookingStatus: BookingStatus;
-  // Consultation scheduling (replaces admin-note workflow) — all optional,
-  // populated by the admin scheduler endpoint (booking.controller.ts
-  // updateConsultation). consultationAdminNote is admin-only, never
-  // exposed on customer routes.
+  // Consultation scheduling — populated by the admin scheduler flow
+  // (booking.controller.ts updateBookingStatus). consultationAdminNote
+  // is admin-only, never exposed on customer routes.
   consultationStatus: ConsultationStatus;
   consultationDate?: Date | null;
   consultationTime?: string | null;
-  consultationMode?: ConsultationMode | null;
-  consultationLink?: string | null;
-  consultationCustomerNote?: string | null;
+  meetingType?: MeetingType | null;
+  meetingLink?: string | null;
+  customerNote?: string | null;
   consultationAdminNote?: string | null;
-  consultationScheduledAt?: Date | null;
-  consultationRescheduledCount?: number;
+  scheduledBy?: string | null;
+  scheduledAt?: Date | null;
+  rescheduledCount?: number;
   notes?: string;
   whatsappSent: boolean;
 
@@ -112,14 +112,15 @@ const BookingSchema = new Schema<IBooking>({
     enum: ['not_scheduled', 'scheduled', 'completed', 'cancelled'],
     default: 'not_scheduled',
   },
-  consultationDate:            { type: Date,   default: null },
-  consultationTime:            { type: String, default: null },
-  consultationMode:            { type: String, enum: ['google_meet', 'whatsapp', 'phone', 'offline', null], default: null },
-  consultationLink:            { type: String, default: null },
-  consultationCustomerNote:    { type: String, default: null },
-  consultationAdminNote:       { type: String, default: null },
-  consultationScheduledAt:     { type: Date,   default: null },
-  consultationRescheduledCount:{ type: Number, default: 0 },
+  consultationDate:      { type: Date,   default: null },
+  consultationTime:      { type: String, default: null },
+  meetingType:           { type: String, enum: ['google_meet', 'whatsapp', 'phone', 'offline', null], default: null },
+  meetingLink:           { type: String, default: null },
+  customerNote:          { type: String, default: null },
+  consultationAdminNote: { type: String, default: null },
+  scheduledBy:           { type: String, default: null },
+  scheduledAt:           { type: Date,   default: null },
+  rescheduledCount:      { type: Number, default: 0 },
 
   notes: { type: String },
   whatsappSent: { type: Boolean, default: false },
