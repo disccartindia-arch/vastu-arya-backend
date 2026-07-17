@@ -31,6 +31,8 @@ export type BookingStatus =
   | 'in_progress'
   | 'completed'
   | 'cancelled';
+export type ConsultationMode = 'google_meet' | 'whatsapp' | 'phone' | 'offline';
+export type ConsultationStatus = 'not_scheduled' | 'scheduled' | 'completed' | 'cancelled';
 
 export interface IBooking extends Document {
   bookingId: string;
@@ -43,10 +45,24 @@ export interface IBooking extends Document {
   formData?: Record<string, any>;
   paymentId?: string;
   razorpayOrderId?: string;
+  transactionId?: string | null;
   paymentMethod?: 'razorpay' | 'upi_manual';
   status: string;
   paymentStatus: PaymentStatus;
   bookingStatus: BookingStatus;
+  // Consultation scheduling (replaces admin-note workflow) — all optional,
+  // populated by the admin scheduler endpoint (booking.controller.ts
+  // updateConsultation). consultationAdminNote is admin-only, never
+  // exposed on customer routes.
+  consultationStatus: ConsultationStatus;
+  consultationDate?: Date | null;
+  consultationTime?: string | null;
+  consultationMode?: ConsultationMode | null;
+  consultationLink?: string | null;
+  consultationCustomerNote?: string | null;
+  consultationAdminNote?: string | null;
+  consultationScheduledAt?: Date | null;
+  consultationRescheduledCount?: number;
   notes?: string;
   whatsappSent: boolean;
 
@@ -73,6 +89,7 @@ const BookingSchema = new Schema<IBooking>({
   formData: { type: Schema.Types.Mixed },
   paymentId: { type: String },
   razorpayOrderId: { type: String },
+  transactionId: { type: String, default: null, index: true },
   paymentMethod: { type: String, enum: ['razorpay', 'upi_manual'], default: 'razorpay' },
   status: { type: String, enum: ['pending','paid','called','completed','cancelled'], default: 'pending' },
 
@@ -86,6 +103,23 @@ const BookingSchema = new Schema<IBooking>({
     enum: ['pending_payment', 'payment_submitted', 'confirmed', 'consultation_scheduled', 'in_progress', 'completed', 'cancelled'],
     default: 'pending_payment',
   },
+
+  // Consultation scheduling — additive fields, all default-null. See
+  // IBooking header comment above for why these replace the free-text
+  // `notes` field for consultation info.
+  consultationStatus: {
+    type: String,
+    enum: ['not_scheduled', 'scheduled', 'completed', 'cancelled'],
+    default: 'not_scheduled',
+  },
+  consultationDate:            { type: Date,   default: null },
+  consultationTime:            { type: String, default: null },
+  consultationMode:            { type: String, enum: ['google_meet', 'whatsapp', 'phone', 'offline', null], default: null },
+  consultationLink:            { type: String, default: null },
+  consultationCustomerNote:    { type: String, default: null },
+  consultationAdminNote:       { type: String, default: null },
+  consultationScheduledAt:     { type: Date,   default: null },
+  consultationRescheduledCount:{ type: Number, default: 0 },
 
   notes: { type: String },
   whatsappSent: { type: Boolean, default: false },

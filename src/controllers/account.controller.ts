@@ -22,7 +22,14 @@ import Booking from '../models/Booking';
 import Order from '../models/Order';
 import UpiPayment from '../models/UpiPayment';
 import StatusAuditLog from '../models/StatusAuditLog';
+import User from '../models/User';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { uploadToCloudinary } from '../routes/upload.routes';
+
+const env = (process as any).env;
+const con = (console as any);
+const CONSULTANT_WHATSAPP = env.CONSULTANT_WHATSAPP || '+91 70003 43804';
+const SUPPORT_WHATSAPP = env.SUPPORT_WHATSAPP || env.SUPPORT_PHONE || '+91 91110 36751';
 
 // ── GET /api/account/dashboard ──────────────────────────────────────
 export const getDashboard = async (req: AuthRequest, res: Response) => {
@@ -103,7 +110,8 @@ export const getMyBookingDetail = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user._id.toString();
     const booking = await Booking.findOne({ bookingId: req.params.id })
-      .select('bookingId name serviceName amount paymentStatus bookingStatus createdAt updatedAt userId');
+      .select('bookingId name serviceName amount paymentStatus bookingStatus createdAt updatedAt userId paymentId paymentMethod ' +
+              'consultationStatus consultationDate consultationTime consultationMode consultationLink consultationCustomerNote consultationScheduledAt');
 
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
 
@@ -122,7 +130,17 @@ export const getMyBookingDetail = async (req: AuthRequest, res: Response) => {
 
     const timeline = auditEntries.map((e: any) => ({ field: e.field, newValue: e.newValue, timestamp: e.createdAt }));
 
-    res.json({ success: true, data: { ...booking.toObject(), timeline } });
+    // Consultant WhatsApp is exposed ONLY once the payment is verified.
+    // Pre-verified customers see only the support number. This is the
+    // WhatsApp access-control boundary — never leak the consultant
+    // number on unverified bookings, never on public endpoints.
+    const isVerified = booking.paymentStatus === 'verified';
+    const contact = {
+      supportWhatsapp: SUPPORT_WHATSAPP,
+      consultantWhatsapp: isVerified ? CONSULTANT_WHATSAPP : null,
+    };
+
+    res.json({ success: true, data: { ...booking.toObject(), timeline, contact } });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -266,7 +284,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'No valid fields to update.' });
     }
 
-    const User = (await import('../models/User')).default;
     const user = await (User as any).findByIdAndUpdate(req.user._id, update, { new: true, runValidators: true }).select('-password');
     res.json({ success: true, message: 'Profile updated', data: user });
   } catch (error: any) {
@@ -305,5 +322,43 @@ export const getActivity = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: pageItems, total: events.length, page: Number(page), pages: Math.ceil(events.length / Number(limit)) });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+// ── PUT /api/account/profile/avatar ─────────────────────────────────
+// Multipart file upload → Cloudinary (reuses existing uploadToCloudinary
+// helper, no new upload infrastructure) → store returned URL on the
+// User's `avatar` field. Route wires multer's upload.single('avatar')
+// ahead of this handler, so req.file is guaranteed by the time we get
+// here (except for the 400 no-file case below).
+export const uploadAvatar = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Avatar file is required.' });
+    }
+    const uploaded = await uploadToCloudinary(
+      req.file.buffer,
+      req.file.mimetype,
+      req.file.originalname,
+      'vastuarya/avatars'
+    );
+
+    const user = await (User as any).findByIdAndUpdate(
+      req.user._id,
+      { avatar: uploaded.url },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    con.log(`[Avatar] uploaded for user=${req.user._id} url=${uploaded.url}`);
+
+    res.json({
+      success: true,
+      message: 'Profile photo updated',
+      data: { avatar: uploaded.url, user },
+    });
+  } catch (error: any) {
+    con.error('[Avatar] upload error:', error.message);
+    res.status(500).json({ success: false, message: error.message || 'Avatar upload failed.' });
   }
 };

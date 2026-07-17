@@ -49,6 +49,10 @@ function getFrontendBaseUrl(): string {
   return env.FRONTEND_URL || 'https://vastuarya.com';
 }
 
+function getSupportPhone(): string {
+  return env.SUPPORT_WHATSAPP || env.SUPPORT_PHONE || '+91 91110 36751';
+}
+
 function statusLink(bookingId: string): string {
   return `${getFrontendBaseUrl()}/status/${bookingId}`;
 }
@@ -155,10 +159,14 @@ function buildEmailShell(opts: {
             </a>
           </div>
 
-          <p style="color: #5C3D1E; font-size: 14px;">For any questions, WhatsApp us: <strong>+91-7000343804</strong></p>
+          <p style="color: #5C3D1E; font-size: 14px;">For any questions, contact support: <strong>${getSupportPhone()}</strong></p>
           <div style="margin: 20px 0; text-align: center;">
-            <a href="https://wa.me/917000343804" style="display: inline-block; background: #25D366; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px;">Chat on WhatsApp</a>
+            <a href="https://wa.me/${getSupportPhone().replace(/[^0-9]/g,'')}" style="display: inline-block; background: #25D366; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px;">Chat with Support</a>
           </div>
+
+          <p style="color: #5C3D1E; font-size: 13px; text-align: center;">
+            <a href="${getFrontendBaseUrl()}" style="color: #FF6B00; text-decoration: none;">${getFrontendBaseUrl().replace(/^https?:\/\//,'')}</a>
+          </p>
 
           <p style="color: #8B6344; font-size: 12px; margin-top: 30px;">&#169; 2026 Vastu Arya | IVAF Certified | New Delhi, India</p>
         </div>
@@ -203,3 +211,114 @@ export async function sendCustomerStatusEmail(payload: CustomerNotificationPaylo
  * who wires it up later.
  */
 export { NOTIFICATION_COPY };
+
+// ────────────────────────────────────────────────────────────────────
+// Consultation-scheduling email — used by booking.controller.ts's
+// updateConsultation() handler. Reuses the same SMTP transport
+// (sendEmail from ./email) and shares support-phone / frontend-URL
+// helpers with the status-change emails above; the only new thing
+// here is the template body, which includes date/time/mode/join-link
+// per the customer-facing consultation brief.
+// ────────────────────────────────────────────────────────────────────
+
+export interface ConsultationEmailPayload {
+  bookingId: string;
+  customerName: string;
+  customerEmail: string;
+  serviceName: string;
+  amount: number;
+  date: Date;
+  time: string;
+  mode: 'google_meet' | 'whatsapp' | 'phone' | 'offline';
+  meetingLink?: string | null;
+  customerNote?: string | null;
+  rescheduled?: boolean;
+}
+
+const MODE_LABEL: Record<ConsultationEmailPayload['mode'], string> = {
+  google_meet: 'Google Meet (Video Call)',
+  whatsapp:    'WhatsApp Call',
+  phone:       'Phone Call',
+  offline:     'In-Person (Offline)',
+};
+
+function buildConsultationEmailHtml(payload: ConsultationEmailPayload): string {
+  const dateStr = payload.date.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const modeLabel = MODE_LABEL[payload.mode];
+  const trackUrl = statusLink(payload.bookingId);
+  const websiteUrl = getFrontendBaseUrl();
+  const supportPhone = getSupportPhone();
+  const heading = payload.rescheduled ? '📅 Consultation Rescheduled' : '📅 Consultation Scheduled';
+
+  const linkBlock = payload.meetingLink
+    ? `
+        <div style="margin: 20px 0; text-align: center;">
+          <a href="${payload.meetingLink}" style="display: inline-block; background: #1a73e8; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 15px;">Join Meeting</a>
+        </div>`
+    : '';
+
+  const noteBlock = payload.customerNote
+    ? `
+        <div style="background: #FFF3E0; border-left: 4px solid #FF6B00; padding: 12px 16px; border-radius: 6px; margin: 20px 0;">
+          <p style="margin: 0; color: #5C3D1E; font-size: 14px;"><strong>From our team:</strong> ${payload.customerNote}</p>
+        </div>`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="font-family: Arial, sans-serif; background: #FFF8F0; margin: 0; padding: 20px;">
+      <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(255,107,0,0.1);">
+        <div style="background: linear-gradient(135deg, #FF6B00, #FF9933); padding: 30px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">Vastu Arya</h1>
+          <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0; font-size: 16px;">${heading}</p>
+        </div>
+        <div style="padding: 30px;">
+          <h2 style="color: #1A0A00; margin-top: 0;">Namaste ${payload.customerName}!</h2>
+          <p style="color: #5C3D1E; line-height: 1.6; font-size: 15px;">
+            Your consultation for <strong>${payload.serviceName}</strong> has been ${payload.rescheduled ? 'rescheduled' : 'scheduled'}.
+            Please find the details below.
+          </p>
+
+          <div style="background: #FFF8F0; border-left: 4px solid #FF6B00; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 4px 0; color: #1A0A00;"><strong>Booking ID:</strong> ${payload.bookingId}</p>
+            <p style="margin: 4px 0; color: #1A0A00;"><strong>Service:</strong> ${payload.serviceName}</p>
+            <p style="margin: 4px 0; color: #1A0A00;"><strong>Date:</strong> ${dateStr}</p>
+            <p style="margin: 4px 0; color: #1A0A00;"><strong>Time:</strong> ${payload.time} IST</p>
+            <p style="margin: 4px 0; color: #1A0A00;"><strong>Meeting Mode:</strong> ${modeLabel}</p>
+          </div>
+
+          ${linkBlock}
+          ${noteBlock}
+
+          <div style="margin: 24px 0; text-align: center;">
+            <a href="${trackUrl}" style="display: inline-block; background: linear-gradient(135deg,#FF6B00,#FF9933); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 15px;">Track Booking Status</a>
+          </div>
+
+          <p style="color: #5C3D1E; font-size: 14px;">For any questions, contact support: <strong>${supportPhone}</strong></p>
+          <div style="margin: 20px 0; text-align: center;">
+            <a href="https://wa.me/${supportPhone.replace(/[^0-9]/g,'')}" style="display: inline-block; background: #25D366; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px;">Chat with Support</a>
+          </div>
+
+          <p style="color: #5C3D1E; font-size: 13px; text-align: center;">
+            <a href="${websiteUrl}" style="color: #FF6B00; text-decoration: none;">${websiteUrl.replace(/^https?:\/\//,'')}</a>
+          </p>
+
+          <p style="color: #8B6344; font-size: 12px; margin-top: 30px;">&#169; 2026 Vastu Arya | IVAF Certified | New Delhi, India</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export async function sendConsultationScheduledEmail(payload: ConsultationEmailPayload): Promise<void> {
+  if (!payload.customerEmail) return;
+  const subject = payload.rescheduled ? 'Consultation Rescheduled — Vastu Arya' : 'Consultation Scheduled — Vastu Arya';
+  await sendEmail({
+    to: payload.customerEmail,
+    subject,
+    html: buildConsultationEmailHtml(payload),
+  });
+}

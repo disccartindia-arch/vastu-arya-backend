@@ -13,11 +13,11 @@ import { Router } from 'express';
 import { submitUpiPayment, getUpiPaymentStatus } from '../controllers/upiPayment.controller';
 import { upload } from './upload.routes';
 import { paymentLimiter } from '../middleware/rateLimit.middleware';
-import { optionalAuth } from '../middleware/auth.middleware';
+import { authMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
 
-router.post('/submit', paymentLimiter, optionalAuth, upload.single('screenshot'), submitUpiPayment); // NEW — optionalAuth added
+router.post('/submit', paymentLimiter, authMiddleware, upload.single('screenshot'), submitUpiPayment); // AUTH ENFORCED — guest UPI submissions rejected
 router.get('/status/:referenceId', getUpiPaymentStatus);
 
 export default router;

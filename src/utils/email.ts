@@ -22,7 +22,8 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
 };
 
 export const bookingConfirmationEmail = (name: string, serviceName: string, bookingId: string, amount: number): string => {
-  const whatsappNumber = process.env.WHATSAPP_NUMBER || '+91-7000343804';
+  const supportPhone = process.env.SUPPORT_WHATSAPP || process.env.SUPPORT_PHONE || '+91 91110 36751';
+  const websiteUrl = process.env.FRONTEND_URL || 'https://vastuarya.com';
   return `
     <!DOCTYPE html>
     <html>
@@ -41,12 +42,15 @@ export const bookingConfirmationEmail = (name: string, serviceName: string, book
             <p style="margin: 4px 0; color: #1A0A00;"><strong>Service:</strong> ${serviceName}</p>
             <p style="margin: 4px 0; color: #1A0A00;"><strong>Amount Paid:</strong> &#8377;${amount}</p>
           </div>
-          <p style="color: #5C3D1E;">Our expert Dr. PPS Tomar will contact you within 24 hours on your registered phone number.</p>
-          <p style="color: #5C3D1E;">For urgent queries, WhatsApp us: <strong>${whatsappNumber}</strong></p>
+          <p style="color: #5C3D1E;">Our expert Dr. PPS Tomar will contact you within 24 hours to schedule your consultation.</p>
+          <p style="color: #5C3D1E;">For any questions, contact support: <strong>${supportPhone}</strong></p>
           <div style="margin: 24px 0; text-align: center;">
-            <a href="https://wa.me/${whatsappNumber.replace(/[^0-9]/g,'')}" style="display: inline-block; background: #25D366; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold;">Chat on WhatsApp</a>
+            <a href="https://wa.me/${supportPhone.replace(/[^0-9]/g,'')}" style="display: inline-block; background: #25D366; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold;">Chat with Support</a>
           </div>
-          <p style="color: #8B6344; font-size: 12px; margin-top: 30px;">&#169; 2025 Vastu Arya | IVAF Certified | New Delhi, India</p>
+          <p style="color: #5C3D1E; font-size: 13px; text-align: center;">
+            <a href="${websiteUrl}" style="color: #FF6B00; text-decoration: none;">${websiteUrl.replace(/^https?:\/\//,'')}</a>
+          </p>
+          <p style="color: #8B6344; font-size: 12px; margin-top: 30px;">&#169; 2026 Vastu Arya | IVAF Certified | New Delhi, India</p>
         </div>
       </div>
     </body>

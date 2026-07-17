@@ -13,9 +13,10 @@ import { Router } from 'express';
 import {
   getDashboard, getMyBookings, getMyBookingDetail,
   getMyOrders, getMyOrderDetail, getMyPayments,
-  getProfile, updateProfile, getActivity,
+  getProfile, updateProfile, getActivity, uploadAvatar,
 } from '../controllers/account.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { upload } from './upload.routes';
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.get('/orders/:id', getMyOrderDetail);
 router.get('/payments', getMyPayments);
 router.get('/profile', getProfile);
 router.put('/profile', updateProfile);
+router.put('/profile/avatar', upload.single('avatar'), uploadAvatar); // NEW — Cloudinary avatar upload
 router.get('/activity', getActivity);
 
 export default router;

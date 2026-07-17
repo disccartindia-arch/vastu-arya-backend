@@ -21,13 +21,13 @@
 import { Router } from 'express';
 import { createOrder, verifyPayment, razorpayWebhook } from '../controllers/payment.controller';
 import { getPaymentSettings, updatePaymentSettings } from '../controllers/paymentSettings.controller';
-import { authMiddleware, adminMiddleware, optionalAuth } from '../middleware/auth.middleware';
+import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
 import { paymentLimiter } from '../middleware/rateLimit.middleware';
 
 const router = Router();
 
-router.post('/create-order', paymentLimiter, createOrder);
-router.post('/verify', paymentLimiter, optionalAuth, verifyPayment); // NEW — optionalAuth added
+router.post('/create-order', paymentLimiter, authMiddleware, createOrder);
+router.post('/verify', paymentLimiter, authMiddleware, verifyPayment); // AUTH ENFORCED — guest bookings rejected
 // NEW — Phase E: Razorpay signed webhook. NOT rate-limited by
 // paymentLimiter because Razorpay retries with backoff and their
 // per-second rate is bounded by their own scheduler. Signature verify

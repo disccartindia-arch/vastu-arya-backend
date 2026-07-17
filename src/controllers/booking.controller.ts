@@ -32,15 +32,17 @@
  * getAllBookings() is unchanged. getBookingById() is unchanged.
  */
 import { Request, Response } from 'express';
-import Booking, { PaymentStatus, BookingStatus } from '../models/Booking';
+import Booking, { PaymentStatus, BookingStatus, ConsultationMode } from '../models/Booking';
 import StatusAuditLog from '../models/StatusAuditLog';
 import { notificationService } from '../utils/notificationService';
+import { sendConsultationScheduledEmail } from '../utils/customerNotification';
 import { AuthRequest } from '../middleware/auth.middleware';
 
 const con = (console as any);
 
 const VALID_PAYMENT_STATUSES: PaymentStatus[] = ['pending', 'submitted', 'verified', 'rejected', 'refunded'];
 const VALID_BOOKING_STATUSES: BookingStatus[] = ['pending_payment', 'payment_submitted', 'confirmed', 'consultation_scheduled', 'in_progress', 'completed', 'cancelled'];
+const VALID_CONSULTATION_MODES: ConsultationMode[] = ['google_meet', 'whatsapp', 'phone', 'offline'];
 
 export const getAllBookings = async (req: Request, res: Response) => {
   try {
@@ -161,6 +163,112 @@ export const getBookingStatusHistory = async (req: Request, res: Response) => {
 
     res.json({ success: true, data: history });
   } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * PUT /api/bookings/:id/consultation
+ *
+ * Admin-only. Replaces the old free-text "admin note" workflow with
+ * structured consultation scheduling. Idempotent-friendly: repeated
+ * calls just re-save + increment rescheduledCount and re-fire the
+ * customer notification (with "Rescheduled" subject if it was already
+ * scheduled). Auto-advances Booking.bookingStatus to
+ * 'consultation_scheduled' if it was 'confirmed', writing a
+ * StatusAuditLog entry for that transition. The consultation email
+ * with date/time/mode/join-link is sent via the same reusable
+ * customerNotification module — no new email transport.
+ */
+export const updateConsultation = async (req: AuthRequest, res: Response) => {
+  try {
+    const { date, time, mode, meetingLink, customerNote, adminNote } = req.body;
+
+    if (!date || !time || !mode) {
+      return res.status(400).json({ success: false, message: 'date, time and mode are required.' });
+    }
+    if (!VALID_CONSULTATION_MODES.includes(mode)) {
+      return res.status(400).json({ success: false, message: `Invalid mode. Allowed: ${VALID_CONSULTATION_MODES.join(', ')}` });
+    }
+    const parsedDate = new Date(date);
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid date.' });
+    }
+    if (mode === 'google_meet' && !meetingLink) {
+      return res.status(400).json({ success: false, message: 'meetingLink is required for google_meet mode.' });
+    }
+
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const adminIdentity = req.user?.name || req.user?.email || 'admin';
+    const wasAlreadyScheduled = booking.consultationStatus === 'scheduled';
+
+    // Persist consultation details on the booking itself.
+    booking.consultationDate         = parsedDate;
+    booking.consultationTime         = time;
+    booking.consultationMode         = mode;
+    booking.consultationLink         = meetingLink ?? null;
+    booking.consultationCustomerNote = customerNote ?? null;
+    booking.consultationAdminNote    = adminNote ?? booking.consultationAdminNote ?? null;
+    booking.consultationStatus       = 'scheduled';
+    booking.consultationScheduledAt  = new Date();
+    if (wasAlreadyScheduled) {
+      booking.consultationRescheduledCount = (booking.consultationRescheduledCount || 0) + 1;
+    }
+
+    // Auto-advance bookingStatus once, first-time only.
+    let bookingStatusChanged = false;
+    let previousBookingStatus = booking.bookingStatus;
+    if (booking.bookingStatus === 'confirmed') {
+      booking.bookingStatus = 'consultation_scheduled';
+      bookingStatusChanged = true;
+    }
+
+    await booking.save();
+
+    // Audit trail for the status transition (if any).
+    if (bookingStatusChanged) {
+      try {
+        await (StatusAuditLog as any).create({
+          bookingId:     booking._id.toString(),
+          bookingRef:    booking.bookingId,
+          field:         'bookingStatus',
+          previousValue: previousBookingStatus,
+          newValue:      'consultation_scheduled',
+          adminUser:     adminIdentity,
+          adminNotes:    adminNote || null,
+        });
+      } catch (err: any) {
+        con.error('[StatusAuditLog] consultation transition failed:', err.message);
+      }
+    }
+
+    // Fire the consultation-scheduled/rescheduled email — reuses the
+    // existing SMTP transport via customerNotification.
+    if (booking.email) {
+      sendConsultationScheduledEmail({
+        bookingId:     booking.bookingId,
+        customerName:  booking.name,
+        customerEmail: booking.email,
+        serviceName:   booking.serviceName,
+        amount:        booking.amount,
+        date:          parsedDate,
+        time,
+        mode,
+        meetingLink:   meetingLink || null,
+        customerNote:  customerNote || null,
+        rescheduled:   wasAlreadyScheduled,
+      }).catch((err: any) => {
+        con.error('[Consultation] email dispatch failed:', err.message);
+      });
+    }
+
+    con.log(`[Consultation] ${wasAlreadyScheduled ? 'rescheduled' : 'scheduled'} for booking=${booking.bookingId} by=${adminIdentity} mode=${mode}`);
+
+    res.json({ success: true, message: wasAlreadyScheduled ? 'Consultation rescheduled' : 'Consultation scheduled', data: booking });
+  } catch (error: any) {
+    con.error('[Consultation] updateConsultation error:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };
