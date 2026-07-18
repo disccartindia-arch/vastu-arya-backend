@@ -2,22 +2,89 @@ import nodemailer from 'nodemailer';
 
 interface EmailOptions { to: string; subject: string; html: string; }
 
-export const sendEmail = async (options: EmailOptions): Promise<void> => {
-  try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    });
-    await transporter.sendMail({
-      from: `"Vastu Arya" <${process.env.SMTP_USER}>`,
-      to: options.to,
+const env = (process as any).env;
+const con = (console as any);
+
+/**
+ * Provider priority:
+ *   1. Resend (if RESEND_API_KEY set)   — preferred for transactional deliverability
+ *   2. SMTP   (if SMTP_HOST/USER/PASS)  — fallback / legacy
+ * If neither is configured, logs a warning and returns silently — the
+ * caller can inspect the returned result to decide whether to persist a
+ * failure log.
+ */
+export interface EmailResult {
+  ok: boolean;
+  provider: 'resend' | 'smtp' | 'none';
+  messageId?: string;
+  error?: string;
+}
+
+async function sendViaResend(options: EmailOptions): Promise<EmailResult> {
+  const apiKey = env.RESEND_API_KEY as string;
+  const from = env.FROM_EMAIL || `Vastu Arya <onboarding@resend.dev>`;
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: [options.to],
       subject: options.subject,
       html: options.html,
-    });
-  } catch (error) {
-    console.error('Email send error:', error);
+    }),
+  });
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { ok: false, provider: 'resend', error: data?.message || data?.name || res.statusText };
+  }
+  return { ok: true, provider: 'resend', messageId: data?.id };
+}
+
+async function sendViaSmtp(options: EmailOptions): Promise<EmailResult> {
+  const transporter = nodemailer.createTransport({
+    host: env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(env.SMTP_PORT || '587'),
+    secure: false,
+    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+  });
+  const info = await transporter.sendMail({
+    from: env.FROM_EMAIL || `"Vastu Arya" <${env.SMTP_USER}>`,
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+  });
+  return { ok: true, provider: 'smtp', messageId: info.messageId };
+}
+
+/**
+ * Backwards-compatible: existing callers do `await sendEmail(opts)` and
+ * ignore the return value. We now return a structured result so new
+ * callers (notificationService) can persist a failure log without
+ * re-throwing (retained fire-and-forget semantics for old callers).
+ */
+export const sendEmail = async (options: EmailOptions): Promise<EmailResult> => {
+  const useResend = !!env.RESEND_API_KEY;
+  const useSmtp   = !!(env.SMTP_USER && env.SMTP_PASS);
+
+  if (!useResend && !useSmtp) {
+    con.warn('[Email] No provider configured (need RESEND_API_KEY or SMTP_*) — skipping send.');
+    return { ok: false, provider: 'none', error: 'no provider configured' };
+  }
+
+  try {
+    if (useResend) {
+      const r = await sendViaResend(options);
+      if (r.ok) return r;
+      con.warn(`[Email] Resend failed (${r.error})${useSmtp ? ' — falling back to SMTP' : ''}`);
+      if (!useSmtp) return r;
+    }
+    return await sendViaSmtp(options);
+  } catch (error: any) {
+    con.error('[Email] send error:', error.message);
+    return { ok: false, provider: useResend ? 'resend' : 'smtp', error: error.message };
   }
 };
 

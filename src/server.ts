@@ -63,6 +63,7 @@ import bookingStatusRoutes from './routes/bookingStatus.routes';
 import accountClaimRoutes from './routes/accountClaim.routes';
 import accountRoutes from './routes/account.routes';
 import adminCustomerLookupRoutes from './routes/adminCustomerLookup.routes';
+import notificationRoutes from './routes/notification.routes';
 
 import { errorMiddleware } from './middleware/error.middleware';
 import { generalLimiter } from './middleware/rateLimit.middleware';
@@ -129,6 +130,7 @@ app.use('/api/product-generator', productGeneratorRoutes);
 app.use('/api/payment/upi', upiPaymentRoutes);
 
 app.use('/api/leads', leadRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use(errorMiddleware);
 

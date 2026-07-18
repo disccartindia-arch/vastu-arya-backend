@@ -35,8 +35,8 @@ import { Request, Response } from 'express';
 import Booking, { PaymentStatus, BookingStatus, MeetingType } from '../models/Booking';
 import StatusAuditLog from '../models/StatusAuditLog';
 import { notificationService } from '../utils/notificationService';
-import { sendConsultationScheduledEmail } from '../utils/customerNotification';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { combineISTDateTime, APP_TIMEZONE } from '../utils/tz';
 
 const con = (console as any);
 
@@ -93,9 +93,9 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
       if (!VALID_MEETING_TYPES.includes(meetingType)) {
         return res.status(400).json({ success: false, message: `Invalid meetingType. Allowed: ${VALID_MEETING_TYPES.join(', ')}` });
       }
-      parsedConsultationDate = new Date(consultationDate);
+      parsedConsultationDate = combineISTDateTime(consultationDate, consultationTime);
       if (isNaN(parsedConsultationDate.getTime())) {
-        return res.status(400).json({ success: false, message: 'Invalid consultationDate.' });
+        return res.status(400).json({ success: false, message: 'Invalid consultationDate/consultationTime.' });
       }
       if (meetingType === 'google_meet' && !meetingLink) {
         return res.status(400).json({ success: false, message: 'meetingLink is required when meetingType is google_meet.' });
@@ -135,6 +135,7 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
 
       booking.consultationDate      = parsedConsultationDate;
       booking.consultationTime      = consultationTime;
+      booking.timezone              = APP_TIMEZONE;
       booking.meetingType           = meetingType;
       booking.meetingLink           = meetingLink ?? null;
       booking.customerNote          = customerNote ?? null;
@@ -193,13 +194,16 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
         });
     }
 
-    // Fire the consultation-scheduled/rescheduled email — reuses the
-    // existing SMTP transport via customerNotification. Fire-and-forget.
-    if (consultationDispatched && booking.email && parsedConsultationDate) {
-      sendConsultationScheduledEmail({
+    // Fire the multi-channel consultation notification (email + SMS +
+    // push) via the reusable NotificationService. Fire-and-forget — a
+    // channel failure never fails the HTTP response.
+    if (consultationDispatched && parsedConsultationDate) {
+      notificationService.sendConsultationNotifications({
+        userId:        booking.userId || null,
         bookingId:     booking.bookingId,
         customerName:  booking.name,
-        customerEmail: booking.email,
+        customerEmail: booking.email || null,
+        customerPhone: booking.phone || null,
         serviceName:   booking.serviceName,
         amount:        booking.amount,
         date:          parsedConsultationDate,
@@ -209,9 +213,9 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
         customerNote:  customerNote || null,
         rescheduled:   wasRescheduled,
       }).catch((err: any) => {
-        con.error('[Consultation] email dispatch failed:', err.message);
+        con.error('[Consultation] notification dispatch failed:', err.message);
       });
-      con.log(`[Consultation] ${wasRescheduled ? 'rescheduled' : 'scheduled'} for booking=${booking.bookingId} by=${adminIdentity} type=${meetingType}`);
+      con.log(`[Consultation] ${wasRescheduled ? 'rescheduled' : 'scheduled'} for booking=${booking.bookingId} by=${adminIdentity} type=${meetingType} tz=${APP_TIMEZONE}`);
     }
 
     res.json({ success: true, message: 'Booking updated', data: booking });

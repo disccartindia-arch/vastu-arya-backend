@@ -56,6 +56,7 @@ export interface IBooking extends Document {
   consultationStatus: ConsultationStatus;
   consultationDate?: Date | null;
   consultationTime?: string | null;
+  timezone?: string | null;
   meetingType?: MeetingType | null;
   meetingLink?: string | null;
   customerNote?: string | null;
@@ -114,6 +115,7 @@ const BookingSchema = new Schema<IBooking>({
   },
   consultationDate:      { type: Date,   default: null },
   consultationTime:      { type: String, default: null },
+  timezone:              { type: String, default: 'Asia/Kolkata' },
   meetingType:           { type: String, enum: ['google_meet', 'whatsapp', 'phone', 'offline', null], default: null },
   meetingLink:           { type: String, default: null },
   customerNote:          { type: String, default: null },

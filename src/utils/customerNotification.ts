@@ -29,6 +29,7 @@
  * Here, STATUS_INFO exists only for email copy.
  */
 import { sendEmail } from './email';
+import { formatISTDate, formatISTTime, APP_TIMEZONE } from './tz';
 
 const env = (process as any).env;
 
@@ -194,11 +195,12 @@ export async function sendCustomerStatusEmail(payload: CustomerNotificationPaylo
 
   const html = buildEmailShell({ heading: copy.heading, bodyText: copy.body, payload });
 
-  await sendEmail({
+  const result = await sendEmail({
     to: payload.customerEmail,
     subject: `${copy.subject} — Vastu Arya`,
     html,
   });
+  if (!result.ok) throw new Error(`email dispatch failed: ${result.error}`);
 }
 
 /**
@@ -243,7 +245,8 @@ const MEETING_TYPE_LABEL: Record<ConsultationEmailPayload['meetingType'], string
 };
 
 function buildConsultationEmailHtml(payload: ConsultationEmailPayload): string {
-  const dateStr = payload.date.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateStr = formatISTDate(payload.date);
+  const timeStr = formatISTTime(payload.date);
   const modeLabel = MEETING_TYPE_LABEL[payload.meetingType];
   const trackUrl = statusLink(payload.bookingId);
   const websiteUrl = getFrontendBaseUrl();
@@ -285,7 +288,8 @@ function buildConsultationEmailHtml(payload: ConsultationEmailPayload): string {
             <p style="margin: 4px 0; color: #1A0A00;"><strong>Booking ID:</strong> ${payload.bookingId}</p>
             <p style="margin: 4px 0; color: #1A0A00;"><strong>Service:</strong> ${payload.serviceName}</p>
             <p style="margin: 4px 0; color: #1A0A00;"><strong>Date:</strong> ${dateStr}</p>
-            <p style="margin: 4px 0; color: #1A0A00;"><strong>Time:</strong> ${payload.time} IST</p>
+            <p style="margin: 4px 0; color: #1A0A00;"><strong>Time:</strong> ${timeStr} IST</p>
+            <p style="margin: 4px 0; color: #1A0A00;"><strong>Timezone:</strong> ${APP_TIMEZONE} (IST, UTC+05:30)</p>
             <p style="margin: 4px 0; color: #1A0A00;"><strong>Meeting Mode:</strong> ${modeLabel}</p>
           </div>
 
@@ -316,9 +320,10 @@ function buildConsultationEmailHtml(payload: ConsultationEmailPayload): string {
 export async function sendConsultationScheduledEmail(payload: ConsultationEmailPayload): Promise<void> {
   if (!payload.customerEmail) return;
   const subject = payload.rescheduled ? 'Consultation Rescheduled — Vastu Arya' : 'Consultation Scheduled — Vastu Arya';
-  await sendEmail({
+  const result = await sendEmail({
     to: payload.customerEmail,
     subject,
     html: buildConsultationEmailHtml(payload),
   });
+  if (!result.ok) throw new Error(`consultation email dispatch failed: ${result.error}`);
 }
