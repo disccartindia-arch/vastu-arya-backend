@@ -314,14 +314,30 @@ export const razorpayWebhook = async (req: Request, res: Response) => {
       // Signal a bad request but don't leak whether the secret is set.
       return res.status(401).json({ success: false, message: 'Missing or unconfigured webhook signature.' });
     }
-    const raw = JSON.stringify(req.body || {});
-    const expected = hmacSha256(secret, raw);
+
+    // req.body is a Buffer here because /api/payment/webhook is mounted
+    // with express.raw() in server.ts, before express.json(). This is
+    // the ONLY safe way to verify Razorpay's HMAC — computing over a
+    // re-stringified JSON body will silently break when Razorpay's
+    // whitespace / key ordering / escape choices don't match Node's
+    // JSON.stringify output.
+    const rawBuf: Buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body || ''));
+    const rawStr = rawBuf.toString('utf8');
+    const expected = hmacSha256(secret, rawStr);
     if (expected !== signature) {
+      con.warn('[Webhook] signature mismatch — refusing to process.');
       return res.status(401).json({ success: false, message: 'Invalid webhook signature.' });
     }
 
-    const event: string = req.body?.event || '';
-    const payload = req.body?.payload || {};
+    // Only NOW do we parse — after the raw bytes have been signature-verified.
+    let parsed: any = {};
+    try { parsed = JSON.parse(rawStr); } catch (err: any) {
+      con.error('[Webhook] JSON parse failed after signature ok:', err.message);
+      return res.status(400).json({ success: false, message: 'Malformed webhook payload.' });
+    }
+
+    const event: string = parsed?.event || '';
+    const payload = parsed?.payload || {};
     const paymentEntity = payload?.payment?.entity || {};
     const refundEntity  = payload?.refund?.entity  || {};
 

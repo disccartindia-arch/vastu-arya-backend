@@ -64,6 +64,16 @@ export interface IBooking extends Document {
   scheduledBy?: string | null;
   scheduledAt?: Date | null;
   rescheduledCount?: number;
+  // Per-channel dispatch status written back asynchronously by
+  // booking.controller.ts after notificationService.sendConsultationNotifications
+  // resolves. Never blocks the booking response. Nullable on bookings
+  // that were never scheduled.
+  notifications?: {
+    email?: { sent: boolean; sentAt?: Date | null; provider?: string | null; error?: string | null };
+    sms?:   { sent: boolean; sentAt?: Date | null; provider?: string | null; error?: string | null };
+    push?:  { sent: boolean; sentAt?: Date | null; attempted?: number; success?: number; failed?: number; error?: string | null };
+    lastDispatchedAt?: Date | null;
+  } | null;
   notes?: string;
   whatsappSent: boolean;
 
@@ -123,6 +133,32 @@ const BookingSchema = new Schema<IBooking>({
   scheduledBy:           { type: String, default: null },
   scheduledAt:           { type: Date,   default: null },
   rescheduledCount:      { type: Number, default: 0 },
+  // Consultation-scheduled notification delivery log. Written by the
+  // async dispatch handler in booking.controller.ts. Every sub-field
+  // is optional so pre-existing bookings need no migration.
+  notifications: {
+    email: {
+      sent:     { type: Boolean, default: false },
+      sentAt:   { type: Date,    default: null },
+      provider: { type: String,  default: null },
+      error:    { type: String,  default: null },
+    },
+    sms: {
+      sent:     { type: Boolean, default: false },
+      sentAt:   { type: Date,    default: null },
+      provider: { type: String,  default: null },
+      error:    { type: String,  default: null },
+    },
+    push: {
+      sent:      { type: Boolean, default: false },
+      sentAt:    { type: Date,    default: null },
+      attempted: { type: Number,  default: 0 },
+      success:   { type: Number,  default: 0 },
+      failed:    { type: Number,  default: 0 },
+      error:     { type: String,  default: null },
+    },
+    lastDispatchedAt: { type: Date, default: null },
+  },
 
   notes: { type: String },
   whatsappSent: { type: Boolean, default: false },

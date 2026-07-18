@@ -19,7 +19,7 @@
  * from before this round.
  */
 import { Router } from 'express';
-import { createOrder, verifyPayment, razorpayWebhook } from '../controllers/payment.controller';
+import { createOrder, verifyPayment } from '../controllers/payment.controller';
 import { getPaymentSettings, updatePaymentSettings } from '../controllers/paymentSettings.controller';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.middleware';
 import { paymentLimiter } from '../middleware/rateLimit.middleware';
@@ -28,11 +28,10 @@ const router = Router();
 
 router.post('/create-order', paymentLimiter, authMiddleware, createOrder);
 router.post('/verify', paymentLimiter, authMiddleware, verifyPayment); // AUTH ENFORCED — guest bookings rejected
-// NEW — Phase E: Razorpay signed webhook. NOT rate-limited by
-// paymentLimiter because Razorpay retries with backoff and their
-// per-second rate is bounded by their own scheduler. Signature verify
-// inside the controller is the security boundary.
-router.post('/webhook', razorpayWebhook);
+// Razorpay signed webhook is mounted DIRECTLY in server.ts (not via
+// this router) so it can consume the raw request body before
+// express.json() re-parses it. See server.ts comment on the raw-body
+// mount for the security rationale.
 
 router.get('/settings', getPaymentSettings);
 router.put('/settings', authMiddleware, adminMiddleware, updatePaymentSettings);

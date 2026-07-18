@@ -91,6 +91,14 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+// Razorpay webhook MUST see the raw request body (bytes as sent by
+// Razorpay) to compute a signature that matches theirs. Mounted here
+// BEFORE express.json() so req.body stays a Buffer for this one route;
+// every other /api/* route below still gets JSON parsing as before.
+import { razorpayWebhook } from './controllers/payment.controller';
+app.post('/api/payment/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('dev'));

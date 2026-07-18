@@ -196,8 +196,13 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
 
     // Fire the multi-channel consultation notification (email + SMS +
     // push) via the reusable NotificationService. Fire-and-forget — a
-    // channel failure never fails the HTTP response.
+    // channel failure never fails the HTTP response. When dispatch
+    // resolves (async, after res.json has already been sent), we
+    // persist the per-channel delivery status back on the booking so
+    // the admin dashboard can display Email/SMS/Push sent-status.
     if (consultationDispatched && parsedConsultationDate) {
+      const dispatchNow = new Date();
+      const bookingMongoId = booking._id.toString();
       notificationService.sendConsultationNotifications({
         userId:        booking.userId || null,
         bookingId:     booking.bookingId,
@@ -212,9 +217,38 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
         meetingLink:   meetingLink || null,
         customerNote:  customerNote || null,
         rescheduled:   wasRescheduled,
-      }).catch((err: any) => {
-        con.error('[Consultation] notification dispatch failed:', err.message);
-      });
+      })
+        .then(async (result) => {
+          try {
+            await Booking.updateOne(
+              { _id: bookingMongoId },
+              {
+                $set: {
+                  'notifications.email.sent':     result.email.ok,
+                  'notifications.email.sentAt':   result.email.ok ? dispatchNow : null,
+                  'notifications.email.provider': result.email.provider || null,
+                  'notifications.email.error':    result.email.error || null,
+                  'notifications.sms.sent':       result.sms.ok,
+                  'notifications.sms.sentAt':     result.sms.ok ? dispatchNow : null,
+                  'notifications.sms.provider':   result.sms.provider || null,
+                  'notifications.sms.error':      result.sms.error || null,
+                  'notifications.push.sent':      result.push.ok,
+                  'notifications.push.sentAt':    result.push.ok ? dispatchNow : null,
+                  'notifications.push.attempted': result.push.attempted,
+                  'notifications.push.success':   result.push.success,
+                  'notifications.push.failed':    result.push.failed,
+                  'notifications.push.error':     result.push.error || null,
+                  'notifications.lastDispatchedAt': dispatchNow,
+                },
+              }
+            );
+          } catch (err: any) {
+            con.error('[Consultation] failed to persist notification status:', err.message);
+          }
+        })
+        .catch((err: any) => {
+          con.error('[Consultation] notification dispatch failed:', err.message);
+        });
       con.log(`[Consultation] ${wasRescheduled ? 'rescheduled' : 'scheduled'} for booking=${booking.bookingId} by=${adminIdentity} type=${meetingType} tz=${APP_TIMEZONE}`);
     }
 
