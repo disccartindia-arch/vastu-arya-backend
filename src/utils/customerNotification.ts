@@ -215,12 +215,14 @@ export async function sendCustomerStatusEmail(payload: CustomerNotificationPaylo
 export { NOTIFICATION_COPY };
 
 // ────────────────────────────────────────────────────────────────────
-// Consultation-scheduling email — used by booking.controller.ts's
-// updateConsultation() handler. Reuses the same SMTP transport
-// (sendEmail from ./email) and shares support-phone / frontend-URL
+// Consultation-scheduling email — fired by booking.controller.ts's
+// updateBookingStatus() handler when consultation fields are present.
+// Reuses the same email transport (sendEmail from ./email → Resend if
+// configured, SMTP fallback) and shares support-phone / frontend-URL
 // helpers with the status-change emails above; the only new thing
-// here is the template body, which includes date/time/mode/join-link
-// per the customer-facing consultation brief.
+// here is the template body, which includes date/time (formatted in
+// IST via ./tz), timezone label, meetingType and join-link per the
+// customer-facing consultation brief.
 // ────────────────────────────────────────────────────────────────────
 
 export interface ConsultationEmailPayload {

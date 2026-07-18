@@ -1,33 +1,25 @@
 /**
- * src/utils/notificationService.ts — NEW
+ * src/utils/notificationService.ts
  *
- * PRODUCTION HOTFIX ROUND 9 — Phase C Part 1, Feature 4 (revised per
- * your instruction: notification SERVICE LAYER, not direct email
- * coupling).
+ * Single entry point for every customer-facing notification the booking
+ * lifecycle produces. Callers (booking.controller.ts, payment.controller.ts)
+ * do NOT import individual providers — they only call:
  *
- * This is the single entry point booking.controller.ts calls for every
- * customer-facing status-change notification. It does not know or care
- * which channel(s) actually deliver the message — today that's email
- * only, via the existing sendEmail() from email.ts, but the call sites
- * in booking.controller.ts never import or call sendEmail() directly
- * anymore. They only ever call notificationService.sendCustomerUpdate().
+ *   notificationService.sendCustomerUpdate(payload)
+ *     → email only (status-change transition emails)
  *
- * WHY THIS MATTERS FOR FUTURE WHATSAPP/SMS/PUSH (Feature 8, explicitly
- * deferred this round): adding a new channel later means writing a new
- * `sendViaWhatsApp()` function in this file and adding one line to the
- * `channels` array below — it does NOT mean touching
- * booking.controller.ts, customerNotification.ts's templates, or the
- * StatusAuditLog write path a second time. The business logic (which
- * transitions are notification-worthy, what data goes in the message)
- * lives in customerNotification.ts's trigger table and template
- * builders, completely separate from HOW a channel delivers it, which
- * lives here.
+ *   notificationService.sendConsultationNotifications(payload)
+ *     → email + SMS + push, dispatched in parallel via Promise.all
  *
- * No WhatsApp/SMS/push code is written this round — only this
- * dispatch layer and the one real channel (email) that already exists.
- * Building stub channel functions with no real provider behind them
- * was deliberately avoided — a fake "sendViaWhatsApp()" that silently
- * no-ops would be misleading dead code, not useful scaffolding.
+ * All channels are provider-abstracted:
+ *   • email → Resend if RESEND_API_KEY, else SMTP fallback     (email.ts)
+ *   • sms   → MSG91 if MSG91_AUTH_KEY, else Twilio fallback    (smsService.ts)
+ *   • push  → Firebase Admin SDK if FIREBASE_* set             (pushService.ts)
+ *
+ * Every channel returns a structured {ok, error?} result. Provider
+ * misconfiguration is a graceful no-op — nothing throws, nothing
+ * blocks, the booking save path is never crashed by a notification
+ * failure.
  */
 import { sendCustomerStatusEmail, sendConsultationScheduledEmail, ConsultationEmailPayload, CustomerNotificationPayload } from './customerNotification';
 import { sendSMS, SmsResult } from './smsService';
